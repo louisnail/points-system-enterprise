@@ -675,21 +675,14 @@ function CockpitPage() {
 /* ==================== EMPLOYEE MANAGEMENT ==================== */
 function CurrentUserListPage() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState('add');
+  const [editingUser, setEditingUser] = useState(null);
   const [fieldOpen, setFieldOpen] = useState(false);
   const [users, setUsers] = useState(MOCK_USERS.map(u=>({...u})));
-  const changeStatus = (id, newStatus, label) => {
-    setUsers(prev => prev.map(u => u.id===id ? {...u, status:newStatus} : u));
-    const user = users.find(u=>u.id===id);
-    message.success(<span><strong>{user?.name}</strong> 已{label}
-      {newStatus===2 && ' — 不再参与积分排名'}
-      {newStatus===1 && ' — 已恢复参与积分排名'}
-    </span>);
-  };
-  const leaveUser = (id) => {
-    setUsers(prev => prev.filter(u => u.id!==id));
-    message.success('已移入历史员工');
-  };
-  const userFields = [
+  const [keyword, setKeyword] = useState('');
+  const [statusFilter, setStatusFilter] = useState(undefined);
+  const [companyFilter, setCompanyFilter] = useState(undefined);
+  const [userFields, setUserFields] = useState([
     { key:'employeeNo', label:'工号', visible:true, required:true },
     { key:'name', label:'姓名', visible:true, required:true },
     { key:'companyBelong', label:'归属组织', visible:true },
@@ -703,13 +696,48 @@ function CurrentUserListPage() {
     { key:'gender', label:'性别', visible:false },
     { key:'hireDate', label:'入职日期', visible:false },
     { key:'email', label:'邮箱', visible:false },
-  ];
+  ]);
+  // Modal form state
+  const [form, setForm] = useState({employeeNo:'',name:'',companyBelong:undefined,department:undefined,status:1,gender:1,hireDate:null,email:'',position:'',rankLevel:undefined,rankingList:undefined,education:undefined,baseCity:'',projectRole:''});
+  const resetForm = () => setForm({employeeNo:'',name:'',companyBelong:undefined,department:undefined,status:1,gender:1,hireDate:null,email:'',position:'',rankLevel:undefined,rankingList:undefined,education:undefined,baseCity:'',projectRole:''});
+  const openAdd = () => { setModalMode('add'); resetForm(); setEditingUser(null); setModalOpen(true); };
+  const openEdit = (r) => { setModalMode('edit'); setEditingUser(r); setForm({employeeNo:r.employeeNo,name:r.name,companyBelong:r.companyBelong,department:r.department,status:r.status,gender:r.gender||1,hireDate:r.hireDate,email:r.email||'',position:r.position||'',rankLevel:r.rankLevel,rankingList:r.rankingList,education:undefined,baseCity:'',projectRole:''}); setModalOpen(true); };
+  const handleSave = () => {
+    if(!form.employeeNo.trim()||!form.name.trim()){ message.error('工号和姓名为必填项'); return; }
+    if(modalMode==='add'){
+      const newUser = { id:Date.now(), ...form, totalPoints:0, ranking:users.length+1 };
+      setUsers(prev=>[...prev, newUser]);
+      message.success(`员工「${form.name}」新增成功`);
+    } else {
+      setUsers(prev=>prev.map(u=>u.id===editingUser.id?{...u,...form}:u));
+      message.success(`员工「${form.name}」编辑成功`);
+    }
+    setModalOpen(false);
+  };
+  const changeStatus = (id, newStatus, label) => {
+    setUsers(prev => prev.map(u => u.id===id ? {...u, status:newStatus} : u));
+    const user = users.find(u=>u.id===id);
+    message.success(<span><strong>{user?.name}</strong> 已{label}
+      {newStatus===2 && ' — 不再参与积分排名'}
+      {newStatus===1 && ' — 已恢复参与积分排名'}
+    </span>);
+  };
+  const leaveUser = (id) => {
+    setUsers(prev => prev.filter(u => u.id!==id));
+    message.success('已移入历史员工');
+  };
+  const filteredUsers = useMemo(()=>{
+    let list = users;
+    if(keyword) list = list.filter(u=>u.employeeNo.includes(keyword)||u.name.includes(keyword));
+    if(statusFilter!==undefined) list = list.filter(u=>u.status===statusFilter);
+    if(companyFilter) list = list.filter(u=>u.companyBelong===companyFilter);
+    return list;
+  },[users,keyword,statusFilter,companyFilter]);
   const activeCount = users.filter(u=>u.status===1).length;
   const disabledCount = users.filter(u=>u.status===2).length;
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('TeamOutlined',{marginRight:8})}员工管理</h2></div>
-      {/* Status summary bar */}
       <Row gutter={12} style={{marginBottom:16}}>
         {[
           {label:'全部',count:users.length,color:'#1890ff'},
@@ -728,25 +756,25 @@ function CurrentUserListPage() {
       </Row>
       <div className="card-box">
         <div className="filter-bar">
-          <Search placeholder="搜索工号/姓名" style={{width:220}} prefix={I('SearchOutlined')} />
-          <Select placeholder="状态" style={{width:120}} allowClear>
+          <Search placeholder="搜索工号/姓名" style={{width:220}} prefix={I('SearchOutlined')} allowClear onSearch={setKeyword} onChange={e=>!e.target.value&&setKeyword('')} />
+          <Select placeholder="状态" style={{width:120}} allowClear value={statusFilter} onChange={setStatusFilter}>
             <Option value={1}>在职</Option><Option value={2}>禁用</Option><Option value={4}>待岗</Option><Option value={5}>停薪留职</Option>
           </Select>
-          <Select placeholder="归属组织" style={{width:120}} allowClear>
+          <Select placeholder="归属组织" style={{width:120}} allowClear value={companyFilter} onChange={setCompanyFilter}>
             <Option value="TD">TD</Option><Option value="XD">XD</Option><Option value="TY">TY</Option><Option value="WB">WB</Option>
           </Select>
         </div>
         <div className="table-actions">
           <Space>
-            <Button type="primary" icon={I('PlusOutlined')} onClick={()=>setModalOpen(true)}>新增员工</Button>
+            <Button type="primary" icon={I('PlusOutlined')} onClick={openAdd}>新增员工</Button>
             <Button icon={I('ExportOutlined')}>导出</Button>
             <Button icon={I('DownloadOutlined')}>模板下载</Button>
             <Button icon={I('UploadOutlined')}>批量导入</Button>
             <Tooltip title="字段管理"><Button icon={I('SettingOutlined')} onClick={()=>setFieldOpen(true)} /></Tooltip>
           </Space>
-          <span style={{color:'#8c8c8c'}}>共 {users.length} 人</span>
+          <span style={{color:'#8c8c8c'}}>共 {filteredUsers.length} 人</span>
         </div>
-        <Table dataSource={users} rowKey="id" size="middle" pagination={{pageSize:20,showTotal:t=>`共 ${t} 人`}}
+        <Table dataSource={filteredUsers} rowKey="id" size="middle" pagination={{pageSize:20,showTotal:t=>`共 ${t} 人`}}
           rowClassName={r=>r.status===2?'ant-table-row-disabled':''}
           columns={[
             { title:'工号', dataIndex:'employeeNo', width:90 },
@@ -765,7 +793,7 @@ function CurrentUserListPage() {
             }},
             { title:'操作', width:200, fixed:'right', render:(_,r)=>(
               <Space size={4} wrap>
-                <a onClick={()=>setModalOpen(true)}>{I('EditOutlined')} 编辑</a>
+                <a onClick={()=>openEdit(r)}>{I('EditOutlined')} 编辑</a>
                 {r.status===1 && <>
                   <Popconfirm title={<span>确认将 <strong>{r.name}</strong> 标记为离职？<br/>离职后将移入历史员工列表</span>} onConfirm={()=>leaveUser(r.id)}>
                     <a style={{color:'#ff4d4f'}}>{I('UserDeleteOutlined')} 离职</a>
@@ -790,43 +818,48 @@ function CurrentUserListPage() {
           ]}
         />
       </div>
-      <Modal open={modalOpen} title={<span>{I('UserAddOutlined',{marginRight:6})}员工信息</span>} width={720} onCancel={()=>setModalOpen(false)} onOk={()=>{message.success('保存成功');setModalOpen(false)}}>
+      <Modal open={modalOpen} title={<span>{I('UserAddOutlined',{marginRight:6})}{modalMode==='edit'?`编辑员工 — ${editingUser?.name||''}`:'新增员工'}</span>} width={720} onCancel={()=>setModalOpen(false)} onOk={handleSave} okText={modalMode==='edit'?'保存修改':'创建'}>
         <Form layout="vertical" style={{marginTop:16}}>
           <Row gutter={16}>
-            <Col span={12}><Form.Item label="工号" required><Input placeholder="如 000009" /></Form.Item></Col>
-            <Col span={12}><Form.Item label="姓名" required><Input /></Form.Item></Col>
-            <Col span={12}><Form.Item label="归属组织" required><Select placeholder="选择"><Option value="TD">TD</Option><Option value="XD">XD</Option><Option value="TY">TY</Option><Option value="WB">WB</Option></Select></Form.Item></Col>
-            <Col span={12}><Form.Item label="部门" required><TreeSelect treeData={MOCK_DEPTS} fieldNames={{label:'name',value:'id',children:'children'}} placeholder="选择部门" treeDefaultExpandAll /></Form.Item></Col>
-            <Col span={12}><Form.Item label="员工状态"><Select defaultValue={1}>
+            <Col span={12}><Form.Item label="工号" required><Input placeholder="如 000009" value={form.employeeNo} onChange={e=>setForm(f=>({...f,employeeNo:e.target.value}))} disabled={modalMode==='edit'} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="姓名" required><Input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="归属组织" required><Select placeholder="选择" value={form.companyBelong} onChange={v=>setForm(f=>({...f,companyBelong:v}))}><Option value="TD">TD</Option><Option value="XD">XD</Option><Option value="TY">TY</Option><Option value="WB">WB</Option></Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="部门" required><TreeSelect treeData={MOCK_DEPTS} fieldNames={{label:'name',value:'name',children:'children'}} placeholder="选择部门" treeDefaultExpandAll value={form.department} onChange={v=>setForm(f=>({...f,department:v}))} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="员工状态"><Select value={form.status} onChange={v=>setForm(f=>({...f,status:v}))}>
               <Option value={1}>在职（参与排名）</Option><Option value={2}>禁用（不参与排名）</Option><Option value={4}>待岗</Option><Option value={5}>停薪留职</Option>
             </Select></Form.Item></Col>
-            <Col span={12}><Form.Item label="性别"><Radio.Group><Radio value={1}>男</Radio><Radio value={2}>女</Radio></Radio.Group></Form.Item></Col>
-            <Col span={12}><Form.Item label="入职日期"><DatePicker style={{width:'100%'}} /></Form.Item></Col>
-            <Col span={12}><Form.Item label="邮箱"><Input /></Form.Item></Col>
-            <Col span={12}><Form.Item label="学历"><Select allowClear><Option value="博士">博士</Option><Option value="硕士">硕士</Option><Option value="本科">本科</Option><Option value="大专">大专</Option></Select></Form.Item></Col>
-            <Col span={12}><Form.Item label="岗位"><Input /></Form.Item></Col>
-            <Col span={12}><Form.Item label="职级"><Select allowClear>{['P3','P4','P5','P6','P7','P8','P9','P10','P11','P12','M1','M2','M3','M4','M5','M6'].map(r=><Option key={r} value={r}>{r}</Option>)}</Select></Form.Item></Col>
-            <Col span={12}><Form.Item label="base地"><Input /></Form.Item></Col>
-            <Col span={12}><Form.Item label="所属榜单"><Select placeholder="选择榜单" allowClear>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id} value={rl.id}>{rl.name}</Option>)}</Select></Form.Item></Col>
-            <Col span={12}><Form.Item label="项目角色"><Input /></Form.Item></Col>
+            <Col span={12}><Form.Item label="性别"><Radio.Group value={form.gender} onChange={e=>setForm(f=>({...f,gender:e.target.value}))}><Radio value={1}>男</Radio><Radio value={2}>女</Radio></Radio.Group></Form.Item></Col>
+            <Col span={12}><Form.Item label="入职日期"><DatePicker style={{width:'100%'}} value={form.hireDate?dayjs(form.hireDate):null} onChange={(_,s)=>setForm(f=>({...f,hireDate:s}))} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="邮箱"><Input value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="学历"><Select allowClear value={form.education} onChange={v=>setForm(f=>({...f,education:v}))}><Option value="博士">博士</Option><Option value="硕士">硕士</Option><Option value="本科">本科</Option><Option value="大专">大专</Option></Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="岗位"><Input value={form.position} onChange={e=>setForm(f=>({...f,position:e.target.value}))} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="职级"><Select allowClear value={form.rankLevel} onChange={v=>setForm(f=>({...f,rankLevel:v}))}>{['P3','P4','P5','P6','P7','P8','P9','P10','P11','P12','M1','M2','M3','M4','M5','M6'].map(r=><Option key={r} value={r}>{r}</Option>)}</Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="base地"><Input value={form.baseCity} onChange={e=>setForm(f=>({...f,baseCity:e.target.value}))} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="所属榜单"><Select placeholder="选择榜单" allowClear value={form.rankingList} onChange={v=>setForm(f=>({...f,rankingList:v}))}>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id} value={rl.name}>{rl.name}</Option>)}</Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="项目角色"><Input value={form.projectRole} onChange={e=>setForm(f=>({...f,projectRole:e.target.value}))} /></Form.Item></Col>
           </Row>
         </Form>
       </Modal>
-      <FieldManageDrawer open={fieldOpen} onClose={()=>setFieldOpen(false)} fields={userFields} title="员工列表 - 字段管理" />
+      <FieldManageDrawer open={fieldOpen} onClose={()=>setFieldOpen(false)} fields={userFields} title="员工列表 - 字段管理" onSave={setUserFields} />
     </div>
   );
 }
 
 function HistoryUserListPage() {
+  const [keyword, setKeyword] = useState('');
+  const filtered = useMemo(()=>{
+    if(!keyword) return MOCK_HISTORY;
+    return MOCK_HISTORY.filter(u=>u.employeeNo.includes(keyword)||u.name.includes(keyword));
+  },[keyword]);
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('HistoryOutlined',{marginRight:8})}历史员工</h2></div>
       <div className="card-box">
         <div className="filter-bar">
-          <Search placeholder="搜索工号/姓名" style={{width:220}} prefix={I('SearchOutlined')} />
-          <Button icon={I('ExportOutlined')}>导出</Button>
+          <Search placeholder="搜索工号/姓名" style={{width:220}} prefix={I('SearchOutlined')} allowClear onSearch={setKeyword} onChange={e=>!e.target.value&&setKeyword('')} />
+          <Button icon={I('ExportOutlined')} onClick={()=>message.success('导出成功')}>导出</Button>
         </div>
-        <Table dataSource={MOCK_HISTORY} rowKey="id" size="middle" columns={[
+        <Table dataSource={filtered} rowKey="id" size="middle" columns={[
           { title:'工号', dataIndex:'employeeNo', width:100 },
           { title:'姓名', dataIndex:'name', width:80 },
           { title:'归属', dataIndex:'companyBelong', width:60, render:v=><Tag color={COMPANY_COLORS[v]}>{v}</Tag> },
@@ -845,27 +878,60 @@ function HistoryUserListPage() {
 function DepartmentManagePage() {
   const [selectedKey, setSelectedKey] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit' | 'addChild'
+  const [modalMode, setModalMode] = useState('add');
   const [modalForm, setModalForm] = useState({ name:'', parentId:null, level:2, sortOrder:0, managerId:null });
   const [managerModalOpen, setManagerModalOpen] = useState(false);
   const [deptFieldOpen, setDeptFieldOpen] = useState(false);
+  const [deptEmpKeyword, setDeptEmpKeyword] = useState('');
+  const [deptEmpCompany, setDeptEmpCompany] = useState(undefined);
+  const [deptEmpStatus, setDeptEmpStatus] = useState(undefined);
+  const [empEditOpen, setEmpEditOpen] = useState(false);
+  const [editingEmp, setEditingEmp] = useState(null);
 
   const levelMap = {1:'集团',2:'事业部',3:'交付组'};
   const levelColors = {1:'#722ed1',2:'#1890ff',3:'#52c41a'};
 
-  // Mock dept managers
-  const [deptManagers, setDeptManagers] = useState({ 2:'000001', 5:'000003', 6:'000007' }); // deptId -> employeeNo
+  // Local dept state for tree CRUD
+  const [depts, setDepts] = useState(JSON.parse(JSON.stringify(MOCK_DEPTS)));
+  const [deptManagers, setDeptManagers] = useState({ 2:'000001', 5:'000003', 6:'000007' });
 
   const flatMap = {};
   const walk = (nodes) => nodes.forEach(n => { flatMap[n.id]=n; if(n.children) walk(n.children); });
-  walk(MOCK_DEPTS);
+  walk(depts);
   const selected = selectedKey ? flatMap[selectedKey] : null;
 
   const toTreeData = (nodes) => nodes.map(n => ({
     key: n.id, title: n.name, level: n.level, memberCount: n.memberCount || 0,
     children: n.children?.length ? toTreeData(n.children) : undefined,
   }));
-  const treeData = toTreeData(MOCK_DEPTS);
+  const treeData = toTreeData(depts);
+
+  // Find parent of a node
+  const findParentId = (nodes, targetId, parentId) => {
+    for(const n of nodes){
+      if(n.id===targetId) return parentId;
+      if(n.children){ const r=findParentId(n.children,targetId,n.id); if(r!==null) return r; }
+    }
+    return null;
+  };
+
+  // Insert node into tree
+  const insertNode = (nodes, parentId, newNode) => {
+    if(!parentId) return [...nodes, newNode];
+    return nodes.map(n=>{
+      if(n.id===parentId) return {...n, children:[...(n.children||[]), newNode]};
+      if(n.children) return {...n, children:insertNode(n.children, parentId, newNode)};
+      return n;
+    });
+  };
+  // Update node in tree
+  const updateNode = (nodes, id, updates) => nodes.map(n=>{
+    if(n.id===id) return {...n,...updates};
+    if(n.children) return {...n, children:updateNode(n.children, id, updates)};
+    return n;
+  });
+  // Delete node from tree
+  const deleteNode = (nodes, id) => nodes.filter(n=>n.id!==id).map(n=>({...n, children:n.children?deleteNode(n.children,id):n.children}));
 
   // Get employees for selected department
   const getDeptUsers = (deptName) => {
@@ -885,7 +951,8 @@ function DepartmentManagePage() {
   const openEditModal = () => {
     if (!selected) return;
     setModalMode('edit');
-    setModalForm({ name:selected.name, parentId:null, level:selected.level, sortOrder:selected.id, managerId:deptManagers[selected.id]||null });
+    const parentId = findParentId(depts, selected.id, null);
+    setModalForm({ name:selected.name, parentId:parentId, level:selected.level, sortOrder:selected.id, managerId:deptManagers[selected.id]||null });
     setModalOpen(true);
   };
   const openAddChildModal = () => {
@@ -896,9 +963,25 @@ function DepartmentManagePage() {
   };
   const handleModalSave = () => {
     if (!modalForm.name.trim()) { message.error('请输入部门名称'); return; }
-    const verb = modalMode==='edit' ? '编辑' : '新增';
-    message.success(`${verb}部门「${modalForm.name}」成功`);
+    if(modalMode==='edit'){
+      setDepts(prev=>updateNode(prev, selected.id, { name:modalForm.name, level:modalForm.level }));
+      if(modalForm.managerId) setDeptManagers(prev=>({...prev,[selected.id]:modalForm.managerId}));
+      message.success(`编辑部门「${modalForm.name}」成功`);
+    } else {
+      const newId = Date.now();
+      const parentId = modalMode==='addChild' ? selected.id : modalForm.parentId;
+      const newNode = { id:newId, name:modalForm.name, level:modalForm.level, memberCount:0, children:[] };
+      setDepts(prev=>insertNode(prev, parentId, newNode));
+      if(modalForm.managerId) setDeptManagers(prev=>({...prev,[newId]:modalForm.managerId}));
+      message.success(`新增部门「${modalForm.name}」成功`);
+    }
     setModalOpen(false);
+  };
+  const handleDeleteDept = () => {
+    if(!selected) return;
+    setDepts(prev=>deleteNode(prev, selected.id));
+    setSelectedKey(null);
+    message.success(`已删除部门「${selected.name}」`);
   };
   const handleSetManager = (empNo) => {
     if (!selected) return;
@@ -910,14 +993,20 @@ function DepartmentManagePage() {
 
   // Dept employee local state for status changes
   const [deptUserOverrides, setDeptUserOverrides] = useState({});
-  const getDeptUsersWithState = () => deptUsers.map(u => ({...u, status: deptUserOverrides[u.id] !== undefined ? deptUserOverrides[u.id] : u.status}));
+  const getDeptUsersWithState = () => {
+    let list = deptUsers.map(u => ({...u, status: deptUserOverrides[u.id] !== undefined ? deptUserOverrides[u.id] : u.status}));
+    if(deptEmpKeyword) list = list.filter(u=>u.employeeNo.includes(deptEmpKeyword)||u.name.includes(deptEmpKeyword));
+    if(deptEmpCompany) list = list.filter(u=>u.companyBelong===deptEmpCompany);
+    if(deptEmpStatus!==undefined) list = list.filter(u=>u.status===deptEmpStatus);
+    return list;
+  };
   const changeDeptUserStatus = (id, newStatus, label) => {
     setDeptUserOverrides(prev => ({...prev, [id]: newStatus}));
     const user = MOCK_USERS.find(u=>u.id===id);
     message.success(<span><strong>{user?.name}</strong> 已{label}{newStatus===2 ? ' — 不再参与积分排名' : newStatus===1 ? ' — 已恢复参与积分排名' : ''}</span>);
   };
 
-  const deptEmployeeFields = [
+  const [deptEmployeeFields, setDeptEmployeeFields] = useState([
     { key:'employeeNo', label:'工号', visible:true, required:true },
     { key:'name', label:'姓名', visible:true, required:true },
     { key:'companyBelong', label:'归属组织', visible:true },
@@ -929,23 +1018,19 @@ function DepartmentManagePage() {
     { key:'status', label:'状态', visible:true },
     { key:'hireDate', label:'入职日期', visible:false },
     { key:'email', label:'邮箱', visible:false },
-  ];
+  ]);
 
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('ApartmentOutlined',{marginRight:8})}部门管理</h2></div>
       <Row gutter={16}>
-        {/* Left: Tree */}
         <Col span={7}>
           <div className="card-box" style={{minHeight:600}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
               <Text strong>{I('ClusterOutlined',{marginRight:6})}组织架构</Text>
               <Button type="primary" size="small" icon={I('PlusOutlined')} onClick={openAddModal}>新增部门</Button>
             </div>
-            <Tree
-              showLine={{showLeafIcon:false}}
-              blockNode
-              defaultExpandAll
+            <Tree showLine={{showLeafIcon:false}} blockNode defaultExpandAll
               selectedKeys={selectedKey?[selectedKey]:[]}
               onSelect={(keys)=>setSelectedKey(keys[0]||null)}
               treeData={treeData}
@@ -964,11 +1049,8 @@ function DepartmentManagePage() {
             />
           </div>
         </Col>
-
-        {/* Right: Dept Info + Employee List */}
         <Col span={17}>
           {selected ? (<>
-            {/* Dept Info Card */}
             <div className="card-box">
               <Descriptions title={<span>{I('InfoCircleOutlined',{marginRight:6})}{selected.name} — 部门详情</span>} bordered column={3} size="small">
                 <Descriptions.Item label="部门名称">{selected.name}</Descriptions.Item>
@@ -989,24 +1071,22 @@ function DepartmentManagePage() {
               <Space style={{marginTop:16}} wrap>
                 <Button type="primary" icon={I('EditOutlined')} onClick={openEditModal}>编辑部门</Button>
                 <Popconfirm title={<div>确认删除「{selected.name}」？<br/><span style={{color:'#ff4d4f'}}>该部门下有 {selected.memberCount||0} 名员工</span></div>}
-                  onConfirm={()=>message.success(`已删除部门「${selected.name}」`)}>
+                  onConfirm={handleDeleteDept}>
                   <Button danger icon={I('DeleteOutlined')} disabled={(selected.children?.length||0)>0}>删除部门</Button>
                 </Popconfirm>
                 {selected.level < 3 && <Button icon={I('PlusOutlined')} onClick={openAddChildModal}>添加子部门</Button>}
                 <Button icon={I('UserSwitchOutlined')} onClick={()=>setManagerModalOpen(true)}>设置主管</Button>
               </Space>
             </div>
-
-            {/* Dept Employee List */}
             <div className="card-box">
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
                 <Text strong>{I('TeamOutlined',{marginRight:6})}{selected.name} — 部门员工 ({deptUsers.length}人)</Text>
                 <Space>
-                  <Search placeholder="搜索工号/姓名" style={{width:180}} size="small" prefix={I('SearchOutlined')} />
-                  <Select placeholder="归属组织" size="small" style={{width:100}} allowClear>
+                  <Search placeholder="搜索工号/姓名" style={{width:180}} size="small" prefix={I('SearchOutlined')} allowClear onSearch={setDeptEmpKeyword} onChange={e=>!e.target.value&&setDeptEmpKeyword('')} />
+                  <Select placeholder="归属组织" size="small" style={{width:100}} allowClear value={deptEmpCompany} onChange={setDeptEmpCompany}>
                     <Option value="TD">TD</Option><Option value="XD">XD</Option><Option value="TY">TY</Option><Option value="WB">WB</Option>
                   </Select>
-                  <Select placeholder="状态" size="small" style={{width:90}} allowClear>
+                  <Select placeholder="状态" size="small" style={{width:90}} allowClear value={deptEmpStatus} onChange={setDeptEmpStatus}>
                     <Option value={1}>在职</Option><Option value={2}>禁用</Option><Option value={4}>待岗</Option><Option value={5}>停薪留职</Option>
                   </Select>
                   <Tooltip title="字段管理"><Button size="small" icon={I('SettingOutlined')} onClick={()=>setDeptFieldOpen(true)} /></Tooltip>
@@ -1036,7 +1116,7 @@ function DepartmentManagePage() {
                   }},
                   { title:'操作', width:120, render:(_,r)=>(
                     <Space size={4}>
-                      <a>{I('EditOutlined')} 编辑</a>
+                      <a onClick={()=>{setEditingEmp(r);setEmpEditOpen(true);}}>{I('EditOutlined')} 编辑</a>
                       {r.status===1 && <Popconfirm title={<div><strong>禁用 {r.name}？</strong><br/><span style={{color:'#fa8c16'}}>禁用后不参与积分排名</span></div>}
                         onConfirm={()=>changeDeptUserStatus(r.id, 2, '禁用')} okText="确认禁用" okButtonProps={{danger:true}}>
                         <a style={{color:'#fa8c16'}}>{I('StopOutlined')} 禁用</a>
@@ -1068,8 +1148,7 @@ function DepartmentManagePage() {
         title={<span>{I('ApartmentOutlined',{marginRight:6})}
           {modalMode==='edit' ? `编辑部门 — ${selected?.name||''}` : modalMode==='addChild' ? `新增子部门 — 上级: ${selected?.name||''}` : '新增部门'}
         </span>}
-        onCancel={()=>setModalOpen(false)}
-        onOk={handleModalSave}
+        onCancel={()=>setModalOpen(false)} onOk={handleModalSave}
         okText={modalMode==='edit'?'保存修改':'创建'}>
         <Form layout="vertical" style={{marginTop:16}}>
           <Form.Item label="部门名称" required>
@@ -1098,7 +1177,7 @@ function DepartmentManagePage() {
             <Select value={modalForm.managerId} onChange={v=>setModalForm(f=>({...f,managerId:v}))}
               placeholder="选择该部门主管" allowClear showSearch
               filterOption={(input,opt)=>opt.children.toLowerCase().includes(input.toLowerCase())}>
-              {MOCK_USERS.map(u=><Option key={u.employeeNo} value={u.employeeNo}>{u.employeeNo} - {u.name} ({u.companyBelong})</Option>)}
+              {MOCK_USERS.filter(u=>u.status===1).map(u=><Option key={u.employeeNo} value={u.employeeNo}>{u.employeeNo} - {u.name} ({u.companyBelong})</Option>)}
             </Select>
           </Form.Item>
         </Form>
@@ -1128,8 +1207,22 @@ function DepartmentManagePage() {
           )} />
       </Modal>
 
-      {/* Dept Employee Field Management Drawer */}
-      <FieldManageDrawer open={deptFieldOpen} onClose={()=>setDeptFieldOpen(false)} fields={deptEmployeeFields} title={`${selected?.name||'部门'} 员工列表 - 字段管理`} />
+      {/* Employee Quick Edit Modal */}
+      <Modal open={empEditOpen} title={<span>{I('EditOutlined',{marginRight:6})}编辑员工 — {editingEmp?.name}</span>} width={500}
+        onCancel={()=>setEmpEditOpen(false)} onOk={()=>{message.success(`员工「${editingEmp?.name}」编辑成功`);setEmpEditOpen(false);}}>
+        {editingEmp && <Form layout="vertical" style={{marginTop:16}}>
+          <Row gutter={16}>
+            <Col span={12}><Form.Item label="工号"><Input disabled value={editingEmp.employeeNo} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="姓名"><Input defaultValue={editingEmp.name} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="归属组织"><Select defaultValue={editingEmp.companyBelong}><Option value="TD">TD</Option><Option value="XD">XD</Option><Option value="TY">TY</Option><Option value="WB">WB</Option></Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="岗位"><Input defaultValue={editingEmp.position} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="职级"><Select defaultValue={editingEmp.rankLevel}>{['P3','P4','P5','P6','P7','M1','M2','M3'].map(r=><Option key={r} value={r}>{r}</Option>)}</Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="所属榜单"><Select defaultValue={editingEmp.rankingList}>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id} value={rl.name}>{rl.name}</Option>)}</Select></Form.Item></Col>
+          </Row>
+        </Form>}
+      </Modal>
+
+      <FieldManageDrawer open={deptFieldOpen} onClose={()=>setDeptFieldOpen(false)} fields={deptEmployeeFields} title={`${selected?.name||'部门'} 员工列表 - 字段管理`} onSave={setDeptEmployeeFields} />
     </div>
   );
 }
@@ -1137,24 +1230,41 @@ function DepartmentManagePage() {
 /* ==================== RANKING LIST CONFIG ==================== */
 function RankingListManagePage() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState('add');
+  const [lists, setLists] = useState(MOCK_RANKING_LISTS.map(l=>({...l})));
+  const [editingList, setEditingList] = useState(null);
+  const [form, setForm] = useState({name:'',description:'',topN:10});
+  const openAdd = () => { setModalMode('add'); setForm({name:'',description:'',topN:10}); setEditingList(null); setModalOpen(true); };
+  const openEdit = (r) => { setModalMode('edit'); setEditingList(r); setForm({name:r.name,description:r.description,topN:r.topN}); setModalOpen(true); };
+  const handleSave = () => {
+    if(!form.name.trim()){ message.error('请输入榜单名称'); return; }
+    if(modalMode==='add'){
+      setLists(prev=>[...prev,{id:Date.now(),name:form.name,description:form.description,topN:form.topN,isActive:1}]);
+      message.success(`榜单「${form.name}」新增成功`);
+    } else {
+      setLists(prev=>prev.map(l=>l.id===editingList.id?{...l,...form}:l));
+      message.success(`榜单「${form.name}」编辑成功`);
+    }
+    setModalOpen(false);
+  };
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('OrderedListOutlined',{marginRight:8})}榜单配置</h2></div>
       <div className="card-box">
-        <div className="table-actions"><Button type="primary" icon={I('PlusOutlined')} onClick={()=>setModalOpen(true)}>新增榜单</Button></div>
-        <Table dataSource={MOCK_RANKING_LISTS} rowKey="id" size="middle" columns={[
+        <div className="table-actions"><Button type="primary" icon={I('PlusOutlined')} onClick={openAdd}>新增榜单</Button></div>
+        <Table dataSource={lists} rowKey="id" size="middle" columns={[
           { title:'榜单名称', dataIndex:'name', width:150 },
           { title:'说明', dataIndex:'description', ellipsis:true },
           { title:'前N名', dataIndex:'topN', width:80 },
-          { title:'启用', width:80, render:(_,r)=><Switch checked={r.isActive===1} /> },
-          { title:'操作', width:120, render:()=><Space><a onClick={()=>setModalOpen(true)}>{I('EditOutlined')} 编辑</a><Popconfirm title="确认删除？"><a style={{color:'#ff4d4f'}}>{I('DeleteOutlined')} 删除</a></Popconfirm></Space> },
+          { title:'启用', width:80, render:(_,r)=><Switch checked={r.isActive===1} onChange={v=>setLists(prev=>prev.map(l=>l.id===r.id?{...l,isActive:v?1:0}:l))} /> },
+          { title:'操作', width:120, render:(_,r)=><Space><a onClick={()=>openEdit(r)}>{I('EditOutlined')} 编辑</a><Popconfirm title="确认删除？" onConfirm={()=>{setLists(prev=>prev.filter(l=>l.id!==r.id));message.success('已删除');}}><a style={{color:'#ff4d4f'}}>{I('DeleteOutlined')} 删除</a></Popconfirm></Space> },
         ]} />
       </div>
-      <Modal open={modalOpen} title={<span>{I('TrophyOutlined',{marginRight:6})}榜单信息</span>} onCancel={()=>setModalOpen(false)} onOk={()=>{message.success('保存成功');setModalOpen(false)}}>
+      <Modal open={modalOpen} title={<span>{I('TrophyOutlined',{marginRight:6})}{modalMode==='edit'?'编辑榜单':'新增榜单'}</span>} onCancel={()=>setModalOpen(false)} onOk={handleSave} okText={modalMode==='edit'?'保存修改':'创建'}>
         <Form layout="vertical" style={{marginTop:16}}>
-          <Form.Item label="榜单名称" required><Input /></Form.Item>
-          <Form.Item label="说明"><TextArea rows={2} /></Form.Item>
-          <Form.Item label="排名前N名"><InputNumber min={1} max={100} defaultValue={10} /></Form.Item>
+          <Form.Item label="榜单名称" required><Input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} /></Form.Item>
+          <Form.Item label="说明"><TextArea rows={2} value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} /></Form.Item>
+          <Form.Item label="排名前N名"><InputNumber min={1} max={100} value={form.topN} onChange={v=>setForm(f=>({...f,topN:v||10}))} /></Form.Item>
         </Form>
       </Modal>
     </div>
@@ -1164,28 +1274,46 @@ function RankingListManagePage() {
 /* ==================== CATEGORY MANAGE ==================== */
 function CategoryManagePage() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState('add');
+  const [categories, setCategories] = useState(MOCK_CATEGORIES.map(c=>({...c})));
+  const [editingCat, setEditingCat] = useState(null);
+  const [form, setForm] = useState({name:'',description:'',sortOrder:0});
+  const openAdd = () => { setModalMode('add'); setForm({name:'',description:'',sortOrder:categories.length+1}); setEditingCat(null); setModalOpen(true); };
+  const openEdit = (r) => { setModalMode('edit'); setEditingCat(r); setForm({name:r.name,description:r.description,sortOrder:r.sortOrder}); setModalOpen(true); };
+  const handleSave = () => {
+    if(!form.name.trim()){ message.error('请输入名称'); return; }
+    if(modalMode==='add'){
+      setCategories(prev=>[...prev,{id:Date.now(),name:form.name,description:form.description,sortOrder:form.sortOrder,isActive:1}]);
+      message.success(`分类「${form.name}」新增成功`);
+    } else {
+      setCategories(prev=>prev.map(c=>c.id===editingCat.id?{...c,...form}:c));
+      message.success(`分类「${form.name}」编辑成功`);
+    }
+    setModalOpen(false);
+  };
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('AppstoreOutlined',{marginRight:8})}分类管理（管控项）</h2></div>
       <div className="card-box">
-        <div className="table-actions"><Button type="primary" icon={I('PlusOutlined')} onClick={()=>setModalOpen(true)}>新增分类</Button></div>
-        <Table dataSource={MOCK_CATEGORIES} rowKey="id" size="middle" columns={[
+        <div className="table-actions"><Button type="primary" icon={I('PlusOutlined')} onClick={openAdd}>新增分类</Button></div>
+        <Table dataSource={categories} rowKey="id" size="middle" columns={[
           { title:'名称', dataIndex:'name', width:200 },
           { title:'说明', dataIndex:'description', ellipsis:true },
           { title:'排序', dataIndex:'sortOrder', width:60 },
           { title:'状态', width:80, render:(_,r)=><Tag color={r.isActive===1?'green':'default'}>{r.isActive===1?'启用':'停用'}</Tag> },
           { title:'操作', width:120, render:(_,r)=>(
-            <Space><a onClick={()=>setModalOpen(true)}>{I('EditOutlined')} 编辑</a>
-            {r.isActive===1 && <Popconfirm title="确认停用？"><a style={{color:'#ff4d4f'}}>{I('StopOutlined')} 停用</a></Popconfirm>}
+            <Space><a onClick={()=>openEdit(r)}>{I('EditOutlined')} 编辑</a>
+            {r.isActive===1 ? <Popconfirm title="确认停用？" onConfirm={()=>{setCategories(prev=>prev.map(c=>c.id===r.id?{...c,isActive:0}:c));message.success('已停用');}}><a style={{color:'#ff4d4f'}}>{I('StopOutlined')} 停用</a></Popconfirm>
+            : <Popconfirm title="确认启用？" onConfirm={()=>{setCategories(prev=>prev.map(c=>c.id===r.id?{...c,isActive:1}:c));message.success('已启用');}}><a style={{color:'#52c41a'}}>{I('CheckCircleOutlined')} 启用</a></Popconfirm>}
             </Space>
           )},
         ]} />
       </div>
-      <Modal open={modalOpen} title={<span>{I('AppstoreAddOutlined',{marginRight:6})}分类信息</span>} onCancel={()=>setModalOpen(false)} onOk={()=>{message.success('保存成功');setModalOpen(false)}}>
+      <Modal open={modalOpen} title={<span>{I('AppstoreAddOutlined',{marginRight:6})}{modalMode==='edit'?'编辑分类':'新增分类'}</span>} onCancel={()=>setModalOpen(false)} onOk={handleSave} okText={modalMode==='edit'?'保存修改':'创建'}>
         <Form layout="vertical" style={{marginTop:16}}>
-          <Form.Item label="名称" required><Input /></Form.Item>
-          <Form.Item label="说明"><TextArea rows={2} /></Form.Item>
-          <Form.Item label="排序"><InputNumber min={0} defaultValue={0} /></Form.Item>
+          <Form.Item label="名称" required><Input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} /></Form.Item>
+          <Form.Item label="说明"><TextArea rows={2} value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} /></Form.Item>
+          <Form.Item label="排序"><InputNumber min={0} value={form.sortOrder} onChange={v=>setForm(f=>({...f,sortOrder:v||0}))} /></Form.Item>
         </Form>
       </Modal>
     </div>
@@ -1195,9 +1323,16 @@ function CategoryManagePage() {
 /* ==================== INDICATOR LIST (with Classification Filter + Field Management) ==================== */
 function IndicatorListPage() {
   const [modalOpen, setModalOpen] = useState(false);
-  const [scoreType, setScoreType] = useState(1);
+  const [modalMode, setModalMode] = useState('add');
+  const [indicators, setIndicators] = useState(MOCK_INDICATORS.map(i=>({...i,isActive:true})));
+  const [editingInd, setEditingInd] = useState(null);
   const [fieldOpen, setFieldOpen] = useState(false);
-  const indicatorFields = [
+  const [catFilter, setCatFilter] = useState(undefined);
+  const [dirFilter, setDirFilter] = useState(undefined);
+  const [psFilter, setPsFilter] = useState(undefined);
+  const [clsFilter, setClsFilter] = useState(undefined);
+  const [form, setForm] = useState({category:undefined,name:'',direction:1,scoreType:1,fixedScore:10,minScore:5,maxScore:15,pointStatus:2,classification:undefined});
+  const [indicatorFields, setIndicatorFields] = useState([
     { key:'category', label:'管控项', visible:true, required:true },
     { key:'name', label:'评价维度', visible:true, required:true },
     { key:'direction', label:'方向', visible:true },
@@ -1206,53 +1341,74 @@ function IndicatorListPage() {
     { key:'classification', label:'积分归类', visible:true },
     { key:'scoreType', label:'分值类型', visible:false },
     { key:'remark', label:'备注', visible:false },
-  ];
+  ]);
+  const openAdd = () => { setModalMode('add'); setForm({category:undefined,name:'',direction:1,scoreType:1,fixedScore:10,minScore:5,maxScore:15,pointStatus:2,classification:undefined}); setEditingInd(null); setModalOpen(true); };
+  const openEdit = (r) => { setModalMode('edit'); setEditingInd(r); setForm({category:r.category,name:r.name,direction:r.direction,scoreType:r.scoreType,fixedScore:r.fixedScore||10,minScore:r.minScore||5,maxScore:r.maxScore||15,pointStatus:r.pointStatus,classification:r.classification}); setModalOpen(true); };
+  const handleSave = () => {
+    if(!form.name.trim()||!form.category){ message.error('管控项和评价维度为必填项'); return; }
+    if(modalMode==='add'){
+      setIndicators(prev=>[...prev,{id:Date.now(),...form,isActive:true}]);
+      message.success(`指标「${form.name}」新增成功`);
+    } else {
+      setIndicators(prev=>prev.map(i=>i.id===editingInd.id?{...i,...form}:i));
+      message.success(`指标「${form.name}」编辑成功`);
+    }
+    setModalOpen(false);
+  };
+  const filteredIndicators = useMemo(()=>{
+    let list = indicators.filter(i=>i.isActive!==false);
+    if(catFilter) list = list.filter(i=>i.category===catFilter);
+    if(dirFilter!==undefined) list = list.filter(i=>i.direction===dirFilter);
+    if(psFilter!==undefined) list = list.filter(i=>i.pointStatus===psFilter);
+    if(clsFilter) list = list.filter(i=>i.classification===clsFilter);
+    return list;
+  },[indicators,catFilter,dirFilter,psFilter,clsFilter]);
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('UnorderedListOutlined',{marginRight:8})}指标列表</h2></div>
       <div className="card-box">
         <div className="filter-bar">
-          <Select placeholder="管控项" style={{width:140}} allowClear>{MOCK_CATEGORIES.map(c=><Option key={c.id} value={c.name}>{c.name}</Option>)}</Select>
-          <Select placeholder="方向" style={{width:100}} allowClear><Option value={1}>加分</Option><Option value={-1}>扣分</Option></Select>
-          <Select placeholder="积分状态" style={{width:120}} allowClear><Option value={1}>过程分</Option><Option value={2}>结果分</Option></Select>
-          <Select placeholder="积分归类" style={{width:150}} allowClear>
+          <Select placeholder="管控项" style={{width:140}} allowClear value={catFilter} onChange={setCatFilter}>{MOCK_CATEGORIES.map(c=><Option key={c.id} value={c.name}>{c.name}</Option>)}</Select>
+          <Select placeholder="方向" style={{width:100}} allowClear value={dirFilter} onChange={setDirFilter}><Option value={1}>加分</Option><Option value={-1}>扣分</Option></Select>
+          <Select placeholder="积分状态" style={{width:120}} allowClear value={psFilter} onChange={setPsFilter}><Option value={1}>过程分</Option><Option value={2}>结果分</Option></Select>
+          <Select placeholder="积分归类" style={{width:150}} allowClear value={clsFilter} onChange={setClsFilter}>
             {CLASSIFICATIONS.map(c=><Option key={c} value={c}>{c}</Option>)}
           </Select>
         </div>
         <div className="table-actions">
           <Space>
-            <Button type="primary" icon={I('PlusOutlined')} onClick={()=>setModalOpen(true)}>新增指标</Button>
+            <Button type="primary" icon={I('PlusOutlined')} onClick={openAdd}>新增指标</Button>
             <Button icon={I('ExportOutlined')}>导出</Button>
             <Button icon={I('DownloadOutlined')}>模板下载</Button>
             <Button icon={I('UploadOutlined')}>批量导入</Button>
             <Tooltip title="字段管理"><Button icon={I('SettingOutlined')} onClick={()=>setFieldOpen(true)} /></Tooltip>
           </Space>
         </div>
-        <Table dataSource={MOCK_INDICATORS} rowKey="id" size="middle" columns={[
+        <Table dataSource={filteredIndicators} rowKey="id" size="middle" columns={[
           { title:'管控项', dataIndex:'category', width:100 },
           { title:'评价维度', dataIndex:'name', width:180 },
           { title:'方向', width:70, render:(_,r)=><Tag color={r.direction===1?'green':'red'}>{r.direction===1?'加分':'扣分'}</Tag> },
           { title:'分值', width:100, render:(_,r)=>r.scoreType===1?`${r.fixedScore} 分`:`${r.minScore} ~ ${r.maxScore} 分` },
           { title:'积分状态', width:80, render:(_,r)=><Tag color={r.pointStatus===1?'purple':'blue'}>{r.pointStatus===1?'过程分':'结果分'}</Tag> },
           { title:'积分归类', dataIndex:'classification', width:120 },
-          { title:'操作', width:100, render:()=><Space><a onClick={()=>setModalOpen(true)}>{I('EditOutlined')} 编辑</a><Popconfirm title="确认停用？"><a style={{color:'#ff4d4f'}}>{I('StopOutlined')} 停用</a></Popconfirm></Space> },
+          { title:'操作', width:100, render:(_,r)=><Space><a onClick={()=>openEdit(r)}>{I('EditOutlined')} 编辑</a><Popconfirm title="确认停用？" onConfirm={()=>{setIndicators(prev=>prev.map(i=>i.id===r.id?{...i,isActive:false}:i));message.success('已停用');}}><a style={{color:'#ff4d4f'}}>{I('StopOutlined')} 停用</a></Popconfirm></Space> },
         ]} />
       </div>
-      <Modal open={modalOpen} title={<span>{I('AimOutlined',{marginRight:6})}指标信息</span>} width={640} onCancel={()=>setModalOpen(false)} onOk={()=>{message.success('保存成功');setModalOpen(false)}}>
+      <Modal open={modalOpen} title={<span>{I('AimOutlined',{marginRight:6})}{modalMode==='edit'?'编辑指标':'新增指标'}</span>} width={640} onCancel={()=>setModalOpen(false)} onOk={handleSave} okText={modalMode==='edit'?'保存修改':'创建'}>
         <Form layout="vertical" style={{marginTop:16}}>
           <Row gutter={16}>
-            <Col span={12}><Form.Item label="管控项" required><Select>{MOCK_CATEGORIES.map(c=><Option key={c.id}>{c.name}</Option>)}</Select></Form.Item></Col>
-            <Col span={12}><Form.Item label="评价维度" required><Input /></Form.Item></Col>
-            <Col span={12}><Form.Item label="方向" required><Radio.Group><Radio value={1}>加分</Radio><Radio value={-1}>扣分</Radio></Radio.Group></Form.Item></Col>
-            <Col span={12}><Form.Item label="分值类型" required><Radio.Group value={scoreType} onChange={e=>setScoreType(e.target.value)}><Radio value={1}>固定</Radio><Radio value={2}>范围</Radio></Radio.Group></Form.Item></Col>
-            {scoreType===1 ? <Col span={12}><Form.Item label="固定分值"><InputNumber style={{width:'100%'}} /></Form.Item></Col>
-            : <><Col span={12}><Form.Item label="最小分值"><InputNumber style={{width:'100%'}} /></Form.Item></Col><Col span={12}><Form.Item label="最大分值"><InputNumber style={{width:'100%'}} /></Form.Item></Col></>}
-            <Col span={12}><Form.Item label="积分状态" required><Radio.Group><Radio value={1}>过程分</Radio><Radio value={2}>结果分</Radio></Radio.Group></Form.Item></Col>
-            <Col span={12}><Form.Item label="积分归类"><Select>{CLASSIFICATIONS.map(c=><Option key={c} value={c}>{c}</Option>)}</Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="管控项" required><Select value={form.category} onChange={v=>setForm(f=>({...f,category:v}))}>{MOCK_CATEGORIES.map(c=><Option key={c.id} value={c.name}>{c.name}</Option>)}</Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="评价维度" required><Input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="方向" required><Radio.Group value={form.direction} onChange={e=>setForm(f=>({...f,direction:e.target.value}))}><Radio value={1}>加分</Radio><Radio value={-1}>扣分</Radio></Radio.Group></Form.Item></Col>
+            <Col span={12}><Form.Item label="分值类型" required><Radio.Group value={form.scoreType} onChange={e=>setForm(f=>({...f,scoreType:e.target.value}))}><Radio value={1}>固定</Radio><Radio value={2}>范围</Radio></Radio.Group></Form.Item></Col>
+            {form.scoreType===1 ? <Col span={12}><Form.Item label="固定分值"><InputNumber style={{width:'100%'}} value={form.fixedScore} onChange={v=>setForm(f=>({...f,fixedScore:v||0}))} /></Form.Item></Col>
+            : <><Col span={12}><Form.Item label="最小分值"><InputNumber style={{width:'100%'}} value={form.minScore} onChange={v=>setForm(f=>({...f,minScore:v||0}))} /></Form.Item></Col><Col span={12}><Form.Item label="最大分值"><InputNumber style={{width:'100%'}} value={form.maxScore} onChange={v=>setForm(f=>({...f,maxScore:v||0}))} /></Form.Item></Col></>}
+            <Col span={12}><Form.Item label="积分状态" required><Radio.Group value={form.pointStatus} onChange={e=>setForm(f=>({...f,pointStatus:e.target.value}))}><Radio value={1}>过程分</Radio><Radio value={2}>结果分</Radio></Radio.Group></Form.Item></Col>
+            <Col span={12}><Form.Item label="积分归类"><Select value={form.classification} onChange={v=>setForm(f=>({...f,classification:v}))}>{CLASSIFICATIONS.map(c=><Option key={c} value={c}>{c}</Option>)}</Select></Form.Item></Col>
           </Row>
         </Form>
       </Modal>
-      <FieldManageDrawer open={fieldOpen} onClose={()=>setFieldOpen(false)} fields={indicatorFields} title="指标列表 - 字段管理" />
+      <FieldManageDrawer open={fieldOpen} onClose={()=>setFieldOpen(false)} fields={indicatorFields} title="指标列表 - 字段管理" onSave={setIndicatorFields} />
     </div>
   );
 }
@@ -1260,12 +1416,39 @@ function IndicatorListPage() {
 /* ==================== QUICK ENTRY ==================== */
 function QuickEntryPage() {
   const [pending, setPending] = useState([
-    { _id:1, employeeNo:'000001', employeeName:'张明', indicatorName:'按时交付项目', categoryName:'项目交付', confirmedScore:10, score:10, description:'Q1项目按期交付' },
-    { _id:2, employeeNo:'000005', employeeName:'刘洋', indicatorName:'代码质量优秀', categoryName:'技术能力', confirmedScore:12, score:12, description:'' },
+    { _id:1, employeeNo:'000001', employeeName:'张明', indicatorId:1, indicatorName:'按时交付项目', categoryName:'项目交付', confirmedScore:10, score:10, description:'Q1项目按期交付' },
+    { _id:2, employeeNo:'000005', employeeName:'刘洋', indicatorId:3, indicatorName:'代码质量优秀', categoryName:'技术能力', confirmedScore:12, score:12, description:'' },
   ]);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Entry form state
+  const [selEmployee, setSelEmployee] = useState(undefined);
+  const [selCategory, setSelCategory] = useState(undefined);
+  const [selIndicator, setSelIndicator] = useState(undefined);
+  const [confirmedScore, setConfirmedScore] = useState(null);
+  const [description, setDescription] = useState('');
+  const [recentFilter, setRecentFilter] = useState(undefined);
+
+  const selectedInd = selIndicator ? MOCK_INDICATORS.find(i=>i.id===selIndicator) : null;
+  const indScore = selectedInd ? (selectedInd.scoreType===1 ? selectedInd.fixedScore : selectedInd.minScore) : null;
+  const filteredIndicators = selCategory ? MOCK_INDICATORS.filter(i=>i.category===MOCK_CATEGORIES.find(c=>c.id===selCategory)?.name) : MOCK_INDICATORS;
+
+  const handleAdd = () => {
+    if(!selEmployee||!selIndicator){ message.error('请选择员工和指标'); return; }
+    const emp = MOCK_USERS.find(u=>u.id===selEmployee);
+    const ind = MOCK_INDICATORS.find(i=>i.id===selIndicator);
+    const score = confirmedScore || indScore || 0;
+    const newItem = { _id: Date.now(), employeeNo:emp.employeeNo, employeeName:emp.name, indicatorId:ind.id, indicatorName:ind.name, categoryName:ind.category, confirmedScore:score, score:score*ind.direction, description };
+    setPending(prev=>[...prev, newItem]);
+    message.success(`已添加：${emp.name} - ${ind.name}`);
+    setSelEmployee(undefined); setSelIndicator(undefined); setConfirmedScore(null); setDescription('');
+  };
+
   const total = pending.reduce((s,r)=>s+r.score,0);
   const unique = new Set(pending.map(r=>r.employeeNo)).size;
+  const recentPoints = useMemo(()=>{
+    if(recentFilter===undefined) return MOCK_POINTS;
+    return MOCK_POINTS.filter(p=>p.auditStatus===recentFilter);
+  },[recentFilter]);
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('EditOutlined',{marginRight:8})}积分录入</h2></div>
@@ -1280,13 +1463,13 @@ function QuickEntryPage() {
             </div>
             <Form layout="vertical">
               <Row gutter={16}>
-                <Col span={8}><Form.Item label="员工"><Select showSearch placeholder="搜索工号/姓名" filterOption={(i,o)=>o.children.toLowerCase().includes(i.toLowerCase())}>{MOCK_USERS.map(u=><Option key={u.id}>{u.employeeNo} - {u.name} ({u.companyBelong})</Option>)}</Select></Form.Item></Col>
-                <Col span={8}><Form.Item label="指标分类"><Select placeholder="全部分类" allowClear>{MOCK_CATEGORIES.map(c=><Option key={c.id}>{c.name}</Option>)}</Select></Form.Item></Col>
-                <Col span={8}><Form.Item label="评价指标"><Select placeholder="选择指标">{MOCK_INDICATORS.map(i=><Option key={i.id}>{i.name} ({i.direction===1?'加分':'扣分'})</Option>)}</Select></Form.Item></Col>
-                <Col span={6}><Form.Item label="指标分值"><InputNumber disabled style={{width:'100%'}} placeholder="请先选指标" /></Form.Item></Col>
-                <Col span={6}><Form.Item label="确认分值"><InputNumber style={{width:'100%'}} /></Form.Item></Col>
-                <Col span={8}><Form.Item label="事由说明"><Input placeholder="选填" /></Form.Item></Col>
-                <Col span={4}><Form.Item label=" "><Button type="primary" block icon={I('PlusOutlined')} onClick={()=>message.info('演示模式')}>添加</Button></Form.Item></Col>
+                <Col span={8}><Form.Item label="员工"><Select showSearch placeholder="搜索工号/姓名" value={selEmployee} onChange={setSelEmployee} filterOption={(i,o)=>o.children.toLowerCase().includes(i.toLowerCase())}>{MOCK_USERS.filter(u=>u.status===1).map(u=><Option key={u.id} value={u.id}>{u.employeeNo} - {u.name} ({u.companyBelong})</Option>)}</Select></Form.Item></Col>
+                <Col span={8}><Form.Item label="指标分类"><Select placeholder="全部分类" allowClear value={selCategory} onChange={v=>{setSelCategory(v);setSelIndicator(undefined);}}>{MOCK_CATEGORIES.map(c=><Option key={c.id} value={c.id}>{c.name}</Option>)}</Select></Form.Item></Col>
+                <Col span={8}><Form.Item label="评价指标"><Select placeholder="选择指标" value={selIndicator} onChange={setSelIndicator}>{filteredIndicators.map(i=><Option key={i.id} value={i.id}>{i.name} ({i.direction===1?'加分':'扣分'})</Option>)}</Select></Form.Item></Col>
+                <Col span={6}><Form.Item label="指标分值"><InputNumber disabled style={{width:'100%'}} value={indScore} placeholder="请先选指标" /></Form.Item></Col>
+                <Col span={6}><Form.Item label="确认分值"><InputNumber style={{width:'100%'}} value={confirmedScore} onChange={setConfirmedScore} placeholder={indScore?`默认${indScore}`:''} /></Form.Item></Col>
+                <Col span={8}><Form.Item label="事由说明"><Input placeholder="选填" value={description} onChange={e=>setDescription(e.target.value)} /></Form.Item></Col>
+                <Col span={4}><Form.Item label=" "><Button type="primary" block icon={I('PlusOutlined')} onClick={handleAdd}>添加</Button></Form.Item></Col>
               </Row>
             </Form>
             {pending.length > 0 && (
@@ -1327,11 +1510,11 @@ function QuickEntryPage() {
       <div className="card-box" style={{marginTop:16}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
           <strong>{I('HistoryOutlined',{marginRight:4})}最近录入记录</strong>
-          <Select placeholder="审核状态" style={{width:120}} allowClear defaultValue={0}>
+          <Select placeholder="审核状态" style={{width:120}} allowClear value={recentFilter} onChange={setRecentFilter}>
             <Option value={0}>待审核</Option><Option value={1}>已通过</Option><Option value={2}>已驳回</Option>
           </Select>
         </div>
-        <Table dataSource={MOCK_POINTS} rowKey="id" size="small" pagination={{pageSize:10}} columns={[
+        <Table dataSource={recentPoints} rowKey="id" size="small" pagination={{pageSize:10}} columns={[
           { title:'员工', dataIndex:'user', width:70 },
           { title:'指标', dataIndex:'indicator', width:140 },
           { title:'分值', dataIndex:'score', width:70, render:v=><Tag color={v>0?'green':'red'}>{v>0?'+':''}{v}</Tag> },
@@ -1370,10 +1553,25 @@ function QuickEntryPage() {
 
 function ProcessMaintainPage() {
   const [modalOpen, setModalOpen] = useState(false);
-  const data = [
+  const [data, setData] = useState([
     { id:1, user:'张明', employeeNo:'000001', indicator:'代码质量优秀', score:12, belongMonth:'2026-03' },
     { id:2, user:'刘洋', employeeNo:'000005', indicator:'跨部门协作贡献', score:8, belongMonth:'2026-03' },
-  ];
+  ]);
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [newScore, setNewScore] = useState(null);
+  const [remark, setRemark] = useState('');
+  const [empFilter, setEmpFilter] = useState(undefined);
+  const filteredData = useMemo(()=>{
+    if(!empFilter) return data;
+    return data.filter(d=>d.employeeNo===empFilter);
+  },[data,empFilter]);
+  const openEdit = (r) => { setEditingRecord(r); setNewScore(r.score); setRemark(''); setModalOpen(true); };
+  const handleUpdate = () => {
+    if(newScore===null){ message.error('请输入新分值'); return; }
+    setData(prev=>prev.map(d=>d.id===editingRecord.id?{...d,score:newScore}:d));
+    message.success(`已更新 ${editingRecord.user} 的「${editingRecord.indicator}」分值为 ${newScore}`);
+    setModalOpen(false);
+  };
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('SyncOutlined',{marginRight:8})}过程分维护</h2></div>
@@ -1381,26 +1579,26 @@ function ProcessMaintainPage() {
         <Alert message="过程分每月维护，同一员工+指标+月份的记录会自动覆盖更新，历史记录自动存档" type="info" showIcon style={{marginBottom:16}} />
         <div className="filter-bar">
           <DatePicker picker="month" placeholder="选择月份" defaultValue={dayjs()} />
-          <Select showSearch placeholder="筛选员工" style={{width:240}} allowClear>{MOCK_USERS.map(u=><Option key={u.id}>{u.employeeNo} - {u.name}</Option>)}</Select>
+          <Select showSearch placeholder="筛选员工" style={{width:240}} allowClear value={empFilter} onChange={v=>setEmpFilter(v)} filterOption={(i,o)=>o.children.toLowerCase().includes(i.toLowerCase())}>{MOCK_USERS.map(u=><Option key={u.employeeNo} value={u.employeeNo}>{u.employeeNo} - {u.name}</Option>)}</Select>
           <Button icon={I('DownloadOutlined')}>模板下载</Button><Button type="primary" icon={I('UploadOutlined')}>批量导入</Button>
         </div>
-        <Table dataSource={data} rowKey="id" size="middle" columns={[
+        <Table dataSource={filteredData} rowKey="id" size="middle" columns={[
           { title:'员工', dataIndex:'user', width:100 },
           { title:'工号', dataIndex:'employeeNo', width:90 },
           { title:'指标', dataIndex:'indicator', width:180 },
           { title:'当前分值', dataIndex:'score', width:100, render:v=><Tag color={v>0?'green':'red'}>{v>0?'+':''}{v}</Tag> },
           { title:'月份', dataIndex:'belongMonth', width:90 },
-          { title:'操作', width:80, render:()=><a onClick={()=>setModalOpen(true)}>{I('EditOutlined')} 更新</a> },
+          { title:'操作', width:80, render:(_,r)=><a onClick={()=>openEdit(r)}>{I('EditOutlined')} 更新</a> },
         ]} />
       </div>
-      <Modal open={modalOpen} title={<span>{I('SyncOutlined',{marginRight:6})}更新过程分</span>} onCancel={()=>setModalOpen(false)} onOk={()=>{message.success('更新成功');setModalOpen(false)}}>
-        <Form layout="vertical" style={{marginTop:16}}>
-          <Form.Item label="员工"><Input disabled defaultValue="张明" /></Form.Item>
-          <Form.Item label="指标"><Input disabled defaultValue="代码质量优秀" /></Form.Item>
-          <Form.Item label="当前分值"><Tag color="green">+12</Tag></Form.Item>
-          <Form.Item label="新分值" required><InputNumber style={{width:200}} defaultValue={12} /></Form.Item>
-          <Form.Item label="说明"><TextArea rows={2} /></Form.Item>
-        </Form>
+      <Modal open={modalOpen} title={<span>{I('SyncOutlined',{marginRight:6})}更新过程分</span>} onCancel={()=>setModalOpen(false)} onOk={handleUpdate}>
+        {editingRecord && <Form layout="vertical" style={{marginTop:16}}>
+          <Form.Item label="员工"><Input disabled value={editingRecord.user} /></Form.Item>
+          <Form.Item label="指标"><Input disabled value={editingRecord.indicator} /></Form.Item>
+          <Form.Item label="当前分值"><Tag color={editingRecord.score>0?'green':'red'}>{editingRecord.score>0?'+':''}{editingRecord.score}</Tag></Form.Item>
+          <Form.Item label="新分值" required><InputNumber style={{width:200}} value={newScore} onChange={setNewScore} /></Form.Item>
+          <Form.Item label="说明"><TextArea rows={2} value={remark} onChange={e=>setRemark(e.target.value)} /></Form.Item>
+        </Form>}
       </Modal>
     </div>
   );
@@ -1409,29 +1607,29 @@ function ProcessMaintainPage() {
 function AuditListPage() {
   const [selectedKeys, setSelectedKeys] = useState([]);
   const [rejectOpen, setRejectOpen] = useState(false);
-  const [points, setPoints] = useState(MOCK_POINTS.map(p=>({...p})));
+  const [rejectReason, setRejectReason] = useState('');
+  const [points, setPoints] = useState(MOCK_POINTS.map(p=>({...p,auditRemark:''})));
+  const [auditFilter, setAuditFilter] = useState(undefined);
+  const [psFilter, setPsFilter] = useState(undefined);
+  const [keyword, setKeyword] = useState('');
   const batchApprove = () => {
     setPoints(prev => prev.map(p => selectedKeys.includes(p.id) ? {...p, auditStatus:1} : p));
     message.success(`已批量通过 ${selectedKeys.length} 条记录`);
     setSelectedKeys([]);
   };
-  const batchReject = () => {
-    setRejectOpen('batch');
-  };
+  const batchReject = () => { setRejectReason(''); setRejectOpen('batch'); };
   const singleApprove = (id) => {
     setPoints(prev => prev.map(p => p.id===id ? {...p, auditStatus:1} : p));
     message.success('已通过');
   };
-  const singleReject = (id) => {
-    setRejectOpen(id);
-  };
+  const singleReject = (id) => { setRejectReason(''); setRejectOpen(id); };
   const confirmReject = () => {
     if (rejectOpen === 'batch') {
-      setPoints(prev => prev.map(p => selectedKeys.includes(p.id) ? {...p, auditStatus:2} : p));
+      setPoints(prev => prev.map(p => selectedKeys.includes(p.id) ? {...p, auditStatus:2, auditRemark:rejectReason} : p));
       message.success(`已批量驳回 ${selectedKeys.length} 条记录`);
       setSelectedKeys([]);
     } else {
-      setPoints(prev => prev.map(p => p.id===rejectOpen ? {...p, auditStatus:2} : p));
+      setPoints(prev => prev.map(p => p.id===rejectOpen ? {...p, auditStatus:2, auditRemark:rejectReason} : p));
       message.success('已驳回');
     }
     setRejectOpen(false);
@@ -1439,31 +1637,38 @@ function AuditListPage() {
   const pendingCount = points.filter(p=>p.auditStatus===0).length;
   const passedCount = points.filter(p=>p.auditStatus===1).length;
   const rejectedCount = points.filter(p=>p.auditStatus===2).length;
+  const filteredPoints = useMemo(()=>{
+    let list = points;
+    if(auditFilter!==undefined) list = list.filter(p=>p.auditStatus===auditFilter);
+    if(psFilter!==undefined) list = list.filter(p=>p.pointStatus===psFilter);
+    if(keyword) list = list.filter(p=>p.user.includes(keyword)||p.employeeNo?.includes(keyword));
+    return list;
+  },[points,auditFilter,psFilter,keyword]);
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('AuditOutlined',{marginRight:8})}积分审核</h2></div>
       <Row gutter={12} style={{marginBottom:16}}>
         {[
-          {label:'待审核',count:pendingCount,color:'#fa8c16'},
-          {label:'已通过',count:passedCount,color:'#52c41a'},
-          {label:'已驳回',count:rejectedCount,color:'#ff4d4f'},
+          {label:'待审核',count:pendingCount,color:'#fa8c16',val:0},
+          {label:'已通过',count:passedCount,color:'#52c41a',val:1},
+          {label:'已驳回',count:rejectedCount,color:'#ff4d4f',val:2},
         ].map(s=>(
           <Col span={8} key={s.label}>
-            <div style={{background:'#fff',borderRadius:6,padding:'8px 16px',textAlign:'center',borderBottom:`3px solid ${s.color}`}}>
+            <div style={{background:'#fff',borderRadius:6,padding:'8px 16px',textAlign:'center',borderBottom:`3px solid ${s.color}`,cursor:'pointer'}} onClick={()=>setAuditFilter(auditFilter===s.val?undefined:s.val)}>
               <div style={{fontSize:20,fontWeight:700,color:s.color}}>{s.count}</div>
-              <div style={{fontSize:11,color:'#8c8c8c'}}>{s.label}</div>
+              <div style={{fontSize:11,color:'#8c8c8c'}}>{s.label}{auditFilter===s.val?' (筛选中)':''}</div>
             </div>
           </Col>
         ))}
       </Row>
       <div className="card-box">
         <div className="filter-bar">
-          <Select defaultValue={0} placeholder="审核状态" style={{width:130}} allowClear>
+          <Select placeholder="审核状态" style={{width:130}} allowClear value={auditFilter} onChange={setAuditFilter}>
             <Option value={0}>待审核</Option><Option value={1}>已通过</Option><Option value={2}>已驳回</Option>
           </Select>
           <DatePicker picker="month" placeholder="归属月份" allowClear />
-          <Select placeholder="积分状态" style={{width:120}} allowClear><Option value={1}>过程分</Option><Option value={2}>结果分</Option></Select>
-          <Search placeholder="搜索员工" style={{width:200}} prefix={I('SearchOutlined')} />
+          <Select placeholder="积分状态" style={{width:120}} allowClear value={psFilter} onChange={setPsFilter}><Option value={1}>过程分</Option><Option value={2}>结果分</Option></Select>
+          <Search placeholder="搜索员工" style={{width:200}} prefix={I('SearchOutlined')} allowClear onSearch={setKeyword} onChange={e=>!e.target.value&&setKeyword('')} />
         </div>
         <div className="table-actions">
           <Space>
@@ -1472,9 +1677,9 @@ function AuditListPage() {
             </Popconfirm>
             <Button danger icon={I('CloseOutlined')} disabled={!selectedKeys.length} onClick={batchReject}>批量驳回 ({selectedKeys.length})</Button>
           </Space>
-          <span style={{color:'#8c8c8c'}}>共 {points.length} 条</span>
+          <span style={{color:'#8c8c8c'}}>共 {filteredPoints.length} 条</span>
         </div>
-        <Table dataSource={points} rowKey="id" size="middle"
+        <Table dataSource={filteredPoints} rowKey="id" size="middle"
           rowSelection={{selectedRowKeys:selectedKeys, onChange:setSelectedKeys, getCheckboxProps:r=>({disabled:r.auditStatus!==0})}}
           columns={[
             { title:'员工', dataIndex:'user', width:70 },
@@ -1486,6 +1691,7 @@ function AuditListPage() {
             { title:'月份', dataIndex:'belongMonth', width:80 },
             { title:'录入人', dataIndex:'registrant', width:70 },
             { title:'审核', dataIndex:'auditStatus', width:80, render:v=><Tag color={AUDIT_COLORS[v]}>{AUDIT_MAP[v]}</Tag> },
+            { title:'驳回理由', dataIndex:'auditRemark', width:120, ellipsis:true, render:v=>v||'-' },
             { title:'操作', width:140, fixed:'right', render:(_,r)=>(
               r.auditStatus===0 ? <Space size="small">
                 <Popconfirm title="确认通过？" onConfirm={()=>singleApprove(r.id)}><a style={{color:'#52c41a'}}>{I('CheckOutlined')} 通过</a></Popconfirm>
@@ -1496,7 +1702,7 @@ function AuditListPage() {
         />
       </div>
       <Modal open={!!rejectOpen} title={<span>{I('CloseCircleOutlined',{marginRight:6})}驳回理由</span>} onCancel={()=>setRejectOpen(false)} onOk={confirmReject}>
-        <TextArea rows={3} placeholder="请输入驳回理由..." style={{marginTop:16}} />
+        <TextArea rows={3} placeholder="请输入驳回理由..." style={{marginTop:16}} value={rejectReason} onChange={e=>setRejectReason(e.target.value)} />
       </Modal>
     </div>
   );
@@ -1504,6 +1710,16 @@ function AuditListPage() {
 
 /* ==================== MONTHLY RANKING ==================== */
 function MonthlyRankingPage() {
+  const [listFilter, setListFilter] = useState(undefined);
+  const [keyword, setKeyword] = useState('');
+  const filteredRankings = useMemo(()=>{
+    let list = MOCK_RANKINGS;
+    if(listFilter) list = list.filter(r=>r.list===listFilter);
+    if(keyword) list = list.filter(r=>r.name.includes(keyword)||r.employeeNo.includes(keyword));
+    return list;
+  },[listFilter,keyword]);
+  const maxScore = filteredRankings.length?Math.max(...filteredRankings.map(r=>r.totalScore)):0;
+  const avgScore = filteredRankings.length?(filteredRankings.reduce((s,r)=>s+r.totalScore,0)/filteredRankings.length).toFixed(1):0;
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('RiseOutlined',{marginRight:8})}排名查看</h2></div>
@@ -1511,18 +1727,18 @@ function MonthlyRankingPage() {
         <div className="filter-bar">
           <Form.Item label="所属月份" style={{marginBottom:0}}><DatePicker picker="month" defaultValue={dayjs()} style={{width:160}} /></Form.Item>
           <Form.Item label="所属榜单" style={{marginBottom:0}}>
-            <Select placeholder="全部榜单" allowClear style={{width:200}}>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id}>{rl.name}</Option>)}</Select>
+            <Select placeholder="全部榜单" allowClear style={{width:200}} value={listFilter} onChange={setListFilter}>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id} value={rl.name}>{rl.name}</Option>)}</Select>
           </Form.Item>
-          <Search placeholder="搜索姓名/工号" style={{width:200}} allowClear prefix={I('SearchOutlined')} />
+          <Search placeholder="搜索姓名/工号" style={{width:200}} allowClear prefix={I('SearchOutlined')} onSearch={setKeyword} onChange={e=>!e.target.value&&setKeyword('')} />
           <div style={{flex:1}} />
           <Button type="primary" icon={I('ReloadOutlined')} onClick={()=>message.success('排名重新计算完成')}>重新计算排名</Button>
         </div>
         <Row gutter={16} style={{marginBottom:16}}>
           {[
-            { bg:'linear-gradient(135deg,#667eea 0%,#764ba2 100%)', label:'参与排名人数', value:MOCK_RANKINGS.length, icon:'TeamOutlined' },
-            { bg:'linear-gradient(135deg,#f093fb 0%,#f5576c 100%)', label:'最高分', value:189, icon:'CrownOutlined' },
-            { bg:'linear-gradient(135deg,#4facfe 0%,#00f2fe 100%)', label:'平均分', value:150.3, icon:'CalculatorOutlined' },
-            { bg:'linear-gradient(135deg,#43e97b 0%,#38f9d7 100%)', label:'所属榜单', value:'全部', icon:'TrophyOutlined' },
+            { bg:'linear-gradient(135deg,#667eea 0%,#764ba2 100%)', label:'参与排名人数', value:filteredRankings.length, icon:'TeamOutlined' },
+            { bg:'linear-gradient(135deg,#f093fb 0%,#f5576c 100%)', label:'最高分', value:maxScore, icon:'CrownOutlined' },
+            { bg:'linear-gradient(135deg,#4facfe 0%,#00f2fe 100%)', label:'平均分', value:avgScore, icon:'CalculatorOutlined' },
+            { bg:'linear-gradient(135deg,#43e97b 0%,#38f9d7 100%)', label:'所属榜单', value:listFilter||'全部', icon:'TrophyOutlined' },
           ].map((c,i)=>(
             <Col span={6} key={i}>
               <div className="gradient-card" style={{background:c.bg,display:'flex',alignItems:'center',gap:12}}>
@@ -1535,7 +1751,7 @@ function MonthlyRankingPage() {
             </Col>
           ))}
         </Row>
-        <Table dataSource={MOCK_RANKINGS} rowKey="ranking" size="small" pagination={{pageSize:20,showTotal:t=>`共 ${t} 人`}}
+        <Table dataSource={filteredRankings} rowKey="ranking" size="small" pagination={{pageSize:20,showTotal:t=>`共 ${t} 人`}}
           columns={[
             { title:'排名', dataIndex:'ranking', width:70, sorter:(a,b)=>a.ranking-b.ranking, render:v=>(
               v<=3 ? <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:28,height:28,borderRadius:'50%',color:'#fff',fontWeight:700,fontSize:14,background:RANK_COLORS[v]}}>{v}</span>
@@ -1562,6 +1778,19 @@ function MonthlyRankingPage() {
 function BlackRankingPage() {
   const [configMode, setConfigMode] = useState('count');
   const [configValue, setConfigValue] = useState(10);
+  const [listFilter, setListFilter] = useState(undefined);
+  const [keyword, setKeyword] = useState('');
+  const filteredBlack = useMemo(()=>{
+    let list = MOCK_BLACK_RANKINGS;
+    if(listFilter) list = list.filter(r=>r.list===listFilter);
+    if(keyword) list = list.filter(r=>r.name.includes(keyword)||r.employeeNo.includes(keyword));
+    // Apply config: limit by count or percent
+    if(configMode==='count') list = list.slice(0, configValue);
+    else list = list.slice(0, Math.ceil(MOCK_BLACK_RANKINGS.length * configValue / 100));
+    return list;
+  },[listFilter,keyword,configMode,configValue]);
+  const minScore = filteredBlack.length?Math.min(...filteredBlack.map(r=>r.totalScore)):0;
+  const avgBlack = filteredBlack.length?(filteredBlack.reduce((s,r)=>s+r.totalScore,0)/filteredBlack.length).toFixed(1):0;
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('FallOutlined',{marginRight:8,color:'#ff4d4f'})}黑榜（倒数榜）</h2></div>
@@ -1571,9 +1800,9 @@ function BlackRankingPage() {
             <div className="filter-bar">
               <Form.Item label="所属月份" style={{marginBottom:0}}><DatePicker picker="month" defaultValue={dayjs()} style={{width:160}} /></Form.Item>
               <Form.Item label="所属榜单" style={{marginBottom:0}}>
-                <Select placeholder="全部榜单" allowClear style={{width:180}}>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id}>{rl.name}</Option>)}</Select>
+                <Select placeholder="全部榜单" allowClear style={{width:180}} value={listFilter} onChange={setListFilter}>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id} value={rl.name}>{rl.name}</Option>)}</Select>
               </Form.Item>
-              <Search placeholder="搜索姓名/工号" style={{width:180}} allowClear prefix={I('SearchOutlined')} />
+              <Search placeholder="搜索姓名/工号" style={{width:180}} allowClear prefix={I('SearchOutlined')} onSearch={setKeyword} onChange={e=>!e.target.value&&setKeyword('')} />
             </div>
           </div>
         </Col>
@@ -1599,9 +1828,9 @@ function BlackRankingPage() {
 
       <Row gutter={16} style={{marginBottom:16}}>
         {[
-          { bg:'linear-gradient(135deg,#ff4d4f 0%,#cf1322 100%)', label:'黑榜人数', value:MOCK_BLACK_RANKINGS.length, icon:'UserDeleteOutlined' },
-          { bg:'linear-gradient(135deg,#fa8c16 0%,#d46b08 100%)', label:'最低分', value:45, icon:'ArrowDownOutlined' },
-          { bg:'linear-gradient(135deg,#8c8c8c 0%,#595959 100%)', label:'平均分（黑榜内）', value:77.2, icon:'CalculatorOutlined' },
+          { bg:'linear-gradient(135deg,#ff4d4f 0%,#cf1322 100%)', label:'黑榜人数', value:filteredBlack.length, icon:'UserDeleteOutlined' },
+          { bg:'linear-gradient(135deg,#fa8c16 0%,#d46b08 100%)', label:'最低分', value:minScore, icon:'ArrowDownOutlined' },
+          { bg:'linear-gradient(135deg,#8c8c8c 0%,#595959 100%)', label:'平均分（黑榜内）', value:avgBlack, icon:'CalculatorOutlined' },
         ].map((c,i)=>(
           <Col span={8} key={i}>
             <div className="gradient-card" style={{background:c.bg,display:'flex',alignItems:'center',gap:12}}>
@@ -1616,7 +1845,7 @@ function BlackRankingPage() {
       </Row>
 
       <div className="card-box">
-        <Table dataSource={MOCK_BLACK_RANKINGS} rowKey="ranking" size="middle" pagination={{pageSize:20,showTotal:t=>`共 ${t} 人`}}
+        <Table dataSource={filteredBlack} rowKey="ranking" size="middle" pagination={{pageSize:20,showTotal:t=>`共 ${t} 人`}}
           columns={[
             { title:'倒数排名', dataIndex:'ranking', width:90, render:v=>(
               <Badge count={`#${v}`} style={{background:v===1?'#ff4d4f':v===2?'#fa8c16':'#faad14',fontWeight:700}} />
@@ -1641,29 +1870,62 @@ function BlackRankingPage() {
 /* ==================== QUARTER STAR ==================== */
 function QuarterStarPage() {
   const [addOpen, setAddOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingStar, setEditingStar] = useState(null);
+  const [stars, setStars] = useState(MOCK_STARS.map(s=>({...s})));
+  const [selQuarter, setSelQuarter] = useState(null);
+  const [selList, setSelList] = useState(undefined);
+  // Add form state
+  const [addForm, setAddForm] = useState({quarter:null,list:undefined,employee:undefined,displayOrder:1,comment:''});
   const qOpts = [];
   const now = new Date();
   for(let y=now.getFullYear();y>=now.getFullYear()-1;y--) for(let q=4;q>=1;q--) qOpts.push(`${y}-Q${q}`);
+  if(!selQuarter && qOpts.length) { /* will init on first render */ }
+  const filteredStars = useMemo(()=>{
+    let list = stars;
+    if(selQuarter) list = list.filter(s=>s.quarter===selQuarter);
+    if(selList) list = list.filter(s=>s.list===selList);
+    return list;
+  },[stars,selQuarter,selList]);
+  const handleAdd = () => {
+    if(!addForm.employee){ message.error('请选择员工'); return; }
+    const emp = MOCK_USERS.find(u=>u.id===addForm.employee);
+    const newStar = { id:Date.now(), user:emp.name, avatar:emp.name[0], dept:emp.department, list:addForm.list||'技术榜', quarter:addForm.quarter||qOpts[0], displayOrder:addForm.displayOrder, comment:addForm.comment };
+    setStars(prev=>[...prev, newStar]);
+    message.success(`已添加 ${emp.name} 为季度之星`);
+    setAddOpen(false);
+    setAddForm({quarter:qOpts[0],list:undefined,employee:undefined,displayOrder:stars.length+1,comment:''});
+  };
+  const handleRemove = (id) => {
+    setStars(prev=>prev.filter(s=>s.id!==id));
+    message.success('已移除');
+  };
+  const openEdit = (star) => { setEditingStar({...star}); setEditOpen(true); };
+  const handleEditSave = () => {
+    setStars(prev=>prev.map(s=>s.id===editingStar.id?editingStar:s));
+    message.success(`已更新 ${editingStar.user} 的信息`);
+    setEditOpen(false);
+  };
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('StarOutlined',{marginRight:8})}季度之星</h2></div>
       <div className="card-box">
         <div style={{display:'flex',gap:12,marginBottom:16,alignItems:'center'}}>
           <Form.Item label="季度" style={{marginBottom:0}}>
-            <Select defaultValue={qOpts[0]} style={{width:140}}>{qOpts.map(q=><Option key={q}>{q}</Option>)}</Select>
+            <Select defaultValue={qOpts[0]} style={{width:140}} value={selQuarter} onChange={setSelQuarter}>{qOpts.map(q=><Option key={q} value={q}>{q}</Option>)}</Select>
           </Form.Item>
           <Form.Item label="榜单" style={{marginBottom:0}}>
-            <Select placeholder="全部榜单" allowClear style={{width:180}}>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id}>{rl.name}</Option>)}</Select>
+            <Select placeholder="全部榜单" allowClear style={{width:180}} value={selList} onChange={setSelList}>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id} value={rl.name}>{rl.name}</Option>)}</Select>
           </Form.Item>
           <div style={{flex:1}} />
           <Space>
-            <Button type="primary" icon={I('PlusOutlined')} onClick={()=>setAddOpen(true)}>选定人员</Button>
+            <Button type="primary" icon={I('PlusOutlined')} onClick={()=>{setAddForm({quarter:selQuarter||qOpts[0],list:selList,employee:undefined,displayOrder:stars.length+1,comment:''});setAddOpen(true);}}>选定人员</Button>
             <Button type="primary" danger icon={I('SendOutlined')} onClick={()=>message.success('季度之星已发布')}>发布</Button>
           </Space>
         </div>
-        <Alert type="success" showIcon message={`${qOpts[0]} 季度之星已发布`} style={{marginBottom:16}} />
+        {filteredStars.length>0 && <Alert type="success" showIcon message={`${selQuarter||qOpts[0]} 季度之星已发布，共 ${filteredStars.length} 人`} style={{marginBottom:16}} />}
         <div className="stars-grid">
-          {MOCK_STARS.map(star=>(
+          {filteredStars.map(star=>(
             <div key={star.id} className="star-card">
               <div className="star-rank">#{star.displayOrder}</div>
               <Avatar size={64} style={{background:'linear-gradient(135deg,#667eea 0%,#764ba2 100%)',fontSize:24}}>{star.avatar}</Avatar>
@@ -1672,23 +1934,32 @@ function QuarterStarPage() {
               <div style={{marginTop:8}}><Tag color="blue">{star.list}</Tag></div>
               {star.comment && <div className="star-comment">"{star.comment}"</div>}
               <Space style={{marginTop:12}}>
-                <Button size="small" icon={I('EditOutlined')}>编辑</Button>
-                <Popconfirm title="确认移除?"><Button size="small" danger icon={I('DeleteOutlined')}>移除</Button></Popconfirm>
+                <Button size="small" icon={I('EditOutlined')} onClick={()=>openEdit(star)}>编辑</Button>
+                <Popconfirm title="确认移除?" onConfirm={()=>handleRemove(star.id)}><Button size="small" danger icon={I('DeleteOutlined')}>移除</Button></Popconfirm>
               </Space>
             </div>
           ))}
+          {filteredStars.length===0 && <div style={{textAlign:'center',padding:40,color:'#bfbfbf'}}>{I('StarOutlined',{fontSize:40,color:'#d9d9d9'})}<p>该季度/榜单暂无季度之星</p></div>}
         </div>
       </div>
-      <Modal open={addOpen} title={<span>{I('StarOutlined',{marginRight:6})}选定季度之星</span>} width={600} onCancel={()=>setAddOpen(false)} onOk={()=>{message.success('已添加');setAddOpen(false)}}>
+      {/* Add Modal */}
+      <Modal open={addOpen} title={<span>{I('StarOutlined',{marginRight:6})}选定季度之星</span>} width={600} onCancel={()=>setAddOpen(false)} onOk={handleAdd}>
         <Form layout="vertical" style={{marginTop:16}}>
           <Row gutter={16}>
-            <Col span={12}><Form.Item label="季度"><Select defaultValue={qOpts[0]}>{qOpts.map(q=><Option key={q}>{q}</Option>)}</Select></Form.Item></Col>
-            <Col span={12}><Form.Item label="所属榜单"><Select placeholder="选择榜单">{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id}>{rl.name}</Option>)}</Select></Form.Item></Col>
-            <Col span={24}><Form.Item label="选择员工"><Select showSearch placeholder="搜索工号/姓名">{MOCK_USERS.map(u=><Option key={u.id}>{u.employeeNo} - {u.name} ({u.companyBelong})</Option>)}</Select></Form.Item></Col>
-            <Col span={12}><Form.Item label="展示顺序"><InputNumber min={1} defaultValue={1} style={{width:'100%'}} /></Form.Item></Col>
-            <Col span={24}><Form.Item label="点评"><TextArea rows={3} placeholder="对该员工的季度点评" /></Form.Item></Col>
+            <Col span={12}><Form.Item label="季度"><Select value={addForm.quarter} onChange={v=>setAddForm(f=>({...f,quarter:v}))}>{qOpts.map(q=><Option key={q} value={q}>{q}</Option>)}</Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="所属榜单"><Select placeholder="选择榜单" value={addForm.list} onChange={v=>setAddForm(f=>({...f,list:v}))}>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id} value={rl.name}>{rl.name}</Option>)}</Select></Form.Item></Col>
+            <Col span={24}><Form.Item label="选择员工" required><Select showSearch placeholder="搜索工号/姓名" value={addForm.employee} onChange={v=>setAddForm(f=>({...f,employee:v}))} filterOption={(i,o)=>o.children.toLowerCase().includes(i.toLowerCase())}>{MOCK_USERS.filter(u=>u.status===1).map(u=><Option key={u.id} value={u.id}>{u.employeeNo} - {u.name} ({u.companyBelong})</Option>)}</Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="展示顺序"><InputNumber min={1} value={addForm.displayOrder} onChange={v=>setAddForm(f=>({...f,displayOrder:v||1}))} style={{width:'100%'}} /></Form.Item></Col>
+            <Col span={24}><Form.Item label="点评"><TextArea rows={3} placeholder="对该员工的季度点评" value={addForm.comment} onChange={e=>setAddForm(f=>({...f,comment:e.target.value}))} /></Form.Item></Col>
           </Row>
         </Form>
+      </Modal>
+      {/* Edit Modal */}
+      <Modal open={editOpen} title={<span>{I('EditOutlined',{marginRight:6})}编辑季度之星 — {editingStar?.user}</span>} width={500} onCancel={()=>setEditOpen(false)} onOk={handleEditSave}>
+        {editingStar && <Form layout="vertical" style={{marginTop:16}}>
+          <Form.Item label="展示顺序"><InputNumber min={1} value={editingStar.displayOrder} onChange={v=>setEditingStar(s=>({...s,displayOrder:v||1}))} style={{width:'100%'}} /></Form.Item>
+          <Form.Item label="点评"><TextArea rows={3} value={editingStar.comment} onChange={e=>setEditingStar(s=>({...s,comment:e.target.value}))} /></Form.Item>
+        </Form>}
       </Modal>
     </div>
   );
@@ -1720,6 +1991,18 @@ function RoleManagePage() {
 }
 
 function ConfigManagePage() {
+  const [config, setConfig] = useState({
+    rankUpdateTime:'02:00', defaultTopN:10,
+    blackMode:'count', blackValue:10,
+    decimalDigits:1, freeAuditThreshold:0, autoArchive:true,
+    deductThreshold:30, changePercent:50, auditTimeoutDays:3,
+    bottomPercent:10, consecutiveMonths:3,
+    autoReport:false, reportCycle:'monthly',
+    systemName:'积分管理系统-企业版', systemLogo:'/logo.png',
+  });
+  const c = (k,v) => setConfig(prev=>({...prev,[k]:v}));
+  const [saved, setSaved] = useState(false);
+  const handleSave = () => { setSaved(true); message.success('配置已保存'); setTimeout(()=>setSaved(false),2000); };
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('SettingOutlined',{marginRight:8})}系统配置</h2></div>
@@ -1727,42 +2010,42 @@ function ConfigManagePage() {
         <Form layout="vertical">
           <Divider orientation="left">{I('BarChartOutlined',{marginRight:4})} 排名设置</Divider>
           <Row gutter={16}>
-            <Col span={8}><Form.Item label="排名每日更新时间"><Input defaultValue="02:00" /></Form.Item></Col>
-            <Col span={8}><Form.Item label="默认榜单排名人数"><InputNumber min={1} defaultValue={10} style={{width:'100%'}} /></Form.Item></Col>
+            <Col span={8}><Form.Item label="排名每日更新时间"><Input value={config.rankUpdateTime} onChange={e=>c('rankUpdateTime',e.target.value)} /></Form.Item></Col>
+            <Col span={8}><Form.Item label="默认榜单排名人数"><InputNumber min={1} value={config.defaultTopN} onChange={v=>c('defaultTopN',v)} style={{width:'100%'}} /></Form.Item></Col>
           </Row>
           <Divider orientation="left">{I('FallOutlined',{marginRight:4})} 黑榜设置</Divider>
           <Row gutter={16}>
-            <Col span={8}><Form.Item label="黑榜模式"><Select defaultValue="count"><Option value="count">按人数</Option><Option value="percent">按比例</Option></Select></Form.Item></Col>
-            <Col span={8}><Form.Item label="黑榜数值"><InputNumber min={1} defaultValue={10} style={{width:'100%'}} /></Form.Item></Col>
+            <Col span={8}><Form.Item label="黑榜模式"><Select value={config.blackMode} onChange={v=>c('blackMode',v)}><Option value="count">按人数</Option><Option value="percent">按比例</Option></Select></Form.Item></Col>
+            <Col span={8}><Form.Item label="黑榜数值"><InputNumber min={1} value={config.blackValue} onChange={v=>c('blackValue',v)} style={{width:'100%'}} /></Form.Item></Col>
           </Row>
           <Divider orientation="left">{I('CalculatorOutlined',{marginRight:4})} 积分设置</Divider>
           <Row gutter={16}>
-            <Col span={8}><Form.Item label="积分小数位数"><InputNumber min={0} max={3} defaultValue={1} style={{width:'100%'}} /></Form.Item></Col>
-            <Col span={8}><Form.Item label="小额免审阈值"><InputNumber min={0} defaultValue={0} style={{width:'100%'}} /></Form.Item></Col>
-            <Col span={8}><Form.Item label="过程分自动存档"><Switch defaultChecked /></Form.Item></Col>
+            <Col span={8}><Form.Item label="积分小数位数"><InputNumber min={0} max={3} value={config.decimalDigits} onChange={v=>c('decimalDigits',v)} style={{width:'100%'}} /></Form.Item></Col>
+            <Col span={8}><Form.Item label="小额免审阈值"><InputNumber min={0} value={config.freeAuditThreshold} onChange={v=>c('freeAuditThreshold',v)} style={{width:'100%'}} /></Form.Item></Col>
+            <Col span={8}><Form.Item label="过程分自动存档"><Switch checked={config.autoArchive} onChange={v=>c('autoArchive',v)} /></Form.Item></Col>
           </Row>
           <Divider orientation="left">{I('WarningOutlined',{marginRight:4})} 异常告警设置</Divider>
           <Row gutter={16}>
-            <Col span={8}><Form.Item label="单人单月扣分阈值"><InputNumber min={1} defaultValue={30} style={{width:'100%'}} addonAfter="分" /></Form.Item></Col>
-            <Col span={8}><Form.Item label="月度积分变化阈值"><InputNumber min={1} max={100} defaultValue={50} style={{width:'100%'}} addonAfter="%" /></Form.Item></Col>
-            <Col span={8}><Form.Item label="审核超时天数"><InputNumber min={1} defaultValue={3} style={{width:'100%'}} addonAfter="天" /></Form.Item></Col>
+            <Col span={8}><Form.Item label="单人单月扣分阈值"><InputNumber min={1} value={config.deductThreshold} onChange={v=>c('deductThreshold',v)} style={{width:'100%'}} addonAfter="分" /></Form.Item></Col>
+            <Col span={8}><Form.Item label="月度积分变化阈值"><InputNumber min={1} max={100} value={config.changePercent} onChange={v=>c('changePercent',v)} style={{width:'100%'}} addonAfter="%" /></Form.Item></Col>
+            <Col span={8}><Form.Item label="审核超时天数"><InputNumber min={1} value={config.auditTimeoutDays} onChange={v=>c('auditTimeoutDays',v)} style={{width:'100%'}} addonAfter="天" /></Form.Item></Col>
           </Row>
           <Divider orientation="left">{I('AlertOutlined',{marginRight:4})} 末位预警设置</Divider>
           <Row gutter={16}>
-            <Col span={8}><Form.Item label="末位百分比阈值"><InputNumber min={1} max={50} defaultValue={10} style={{width:'100%'}} addonAfter="%" /></Form.Item></Col>
-            <Col span={8}><Form.Item label="连续低位触发高危月数"><InputNumber min={1} defaultValue={3} style={{width:'100%'}} addonAfter="月" /></Form.Item></Col>
+            <Col span={8}><Form.Item label="末位百分比阈值"><InputNumber min={1} max={50} value={config.bottomPercent} onChange={v=>c('bottomPercent',v)} style={{width:'100%'}} addonAfter="%" /></Form.Item></Col>
+            <Col span={8}><Form.Item label="连续低位触发高危月数"><InputNumber min={1} value={config.consecutiveMonths} onChange={v=>c('consecutiveMonths',v)} style={{width:'100%'}} addonAfter="月" /></Form.Item></Col>
           </Row>
           <Divider orientation="left">{I('FileTextOutlined',{marginRight:4})} 报表设置</Divider>
           <Row gutter={16}>
-            <Col span={8}><Form.Item label="自动生成报表"><Switch /></Form.Item></Col>
-            <Col span={8}><Form.Item label="生成周期"><Select defaultValue="monthly"><Option value="monthly">每月1号</Option><Option value="quarterly">每季度首月</Option></Select></Form.Item></Col>
+            <Col span={8}><Form.Item label="自动生成报表"><Switch checked={config.autoReport} onChange={v=>c('autoReport',v)} /></Form.Item></Col>
+            <Col span={8}><Form.Item label="生成周期"><Select value={config.reportCycle} onChange={v=>c('reportCycle',v)}><Option value="monthly">每月1号</Option><Option value="quarterly">每季度首月</Option></Select></Form.Item></Col>
           </Row>
           <Divider orientation="left">{I('InfoCircleOutlined',{marginRight:4})} 系统信息</Divider>
           <Row gutter={16}>
-            <Col span={8}><Form.Item label="系统名称"><Input defaultValue="积分管理系统-企业版" /></Form.Item></Col>
-            <Col span={8}><Form.Item label="系统Logo"><Input defaultValue="/logo.png" /></Form.Item></Col>
+            <Col span={8}><Form.Item label="系统名称"><Input value={config.systemName} onChange={e=>c('systemName',e.target.value)} /></Form.Item></Col>
+            <Col span={8}><Form.Item label="系统Logo"><Input value={config.systemLogo} onChange={e=>c('systemLogo',e.target.value)} /></Form.Item></Col>
           </Row>
-          <Form.Item><Button type="primary" icon={I('SaveOutlined')} onClick={()=>message.success('配置已保存')}>保存配置</Button></Form.Item>
+          <Form.Item><Button type="primary" icon={I('SaveOutlined')} onClick={handleSave} loading={saved}>保存配置</Button></Form.Item>
         </Form>
       </div>
     </div>
