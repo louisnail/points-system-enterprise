@@ -1,0 +1,14 @@
+{
+  "name": "points-system-enterprise",
+  "version": "1.0.0",
+  "private": true,
+  "description": "员工积分管理系统-企业版",
+  "scripts": {
+    "dev:backend": "cd backend && npm run start:dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  }
+}

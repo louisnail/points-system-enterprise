@@ -1,0 +1,1865 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>积分管理系统-企业版 原型 v2.1</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/dayjs/dayjs.min.js"></script>
+  <script src="https://unpkg.com/antd@5/dist/antd.min.js"></script>
+  <script src="https://unpkg.com/@ant-design/icons@5/dist/index.umd.min.js"></script>
+  <script src="https://unpkg.com/echarts@5/dist/echarts.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/antd@5/dist/reset.css" />
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .login-bg { min-height:100vh; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); display:flex; align-items:center; justify-content:center; }
+    .login-card { background:#fff; border-radius:12px; padding:48px 40px; width:400px; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+    .login-title { text-align:center; font-size:24px; font-weight:700; margin-bottom:8px; color:#1a1a2e; }
+    .login-sub { text-align:center; color:#8c8c8c; margin-bottom:32px; font-size:14px; }
+    .page-container { padding:24px; }
+    .page-header h2 { font-size:20px; font-weight:600; margin-bottom:20px; color:#1a1a2e; }
+    .card-box { background:#fff; border-radius:8px; padding:24px; box-shadow:0 1px 4px rgba(0,0,0,.08); margin-bottom:16px; }
+    .filter-bar { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
+    .table-actions { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+    .stat-card { background:#fff; border-radius:8px; padding:20px 24px; box-shadow:0 1px 4px rgba(0,0,0,.08); text-align:center; }
+    .stat-value { font-size:28px; font-weight:700; line-height:1.3; }
+    .stat-label { font-size:13px; color:#8c8c8c; margin-top:4px; }
+    .stars-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:16px; }
+    .star-card { background:#fff; border:1px solid #f0f0f0; border-radius:12px; padding:24px 16px; text-align:center; position:relative; transition:box-shadow .3s; }
+    .star-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.1); }
+    .star-rank { position:absolute; top:8px; left:12px; font-size:18px; font-weight:700; color:#faad14; }
+    .star-name { font-size:16px; font-weight:600; margin-top:8px; }
+    .star-dept { font-size:12px; color:#8c8c8c; margin-top:4px; }
+    .star-comment { font-size:12px; color:#595959; font-style:italic; margin-top:8px; padding:8px; background:#fafafa; border-radius:6px; line-height:1.6; }
+    .gradient-card { border-radius:8px; padding:16px 24px; color:#fff; flex:1; }
+    .kpi-card { background:#fff; border-radius:8px; padding:16px 20px; box-shadow:0 1px 4px rgba(0,0,0,.06); border-left:4px solid; }
+    .kpi-card .kpi-value { font-size:24px; font-weight:700; line-height:1.3; }
+    .kpi-card .kpi-label { font-size:12px; color:#8c8c8c; margin-top:2px; }
+    .kpi-card .kpi-change { font-size:11px; margin-top:4px; }
+    .chart-box { background:#fff; border-radius:8px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.06); height:400px; }
+    .chart-box .chart-title { font-size:14px; font-weight:600; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; }
+    .insight-card { background:#fff; border-radius:8px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+    .insight-card .insight-title { font-size:14px; font-weight:600; margin-bottom:12px; }
+    .anomaly-item { padding:8px 12px; border-radius:6px; margin-bottom:6px; display:flex; align-items:center; gap:8px; }
+    .field-manage-row { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-bottom:1px solid #f0f0f0; }
+    .field-manage-row:last-child { border-bottom:none; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useEffect, useRef } = React;
+const { Layout, Menu, Button, Table, Card, Modal, Form, Input, Select, Tag, Space, Typography,
+  Row, Col, Tabs, DatePicker, InputNumber, Radio, Switch, Popconfirm, Alert, Upload, Avatar,
+  Descriptions, Tree, TreeSelect, Divider, Badge, message, Tooltip, Result, Drawer, Progress,
+  Statistic, List, Dropdown } = antd;
+const { Header, Sider, Content } = Layout;
+const { Option } = Select;
+const { Title, Text } = Typography;
+const { TextArea, Search } = Input;
+
+/* AntD Icons */
+const Icons = window.icons || {};
+const I = (name, style) => {
+  const Comp = Icons[name];
+  return Comp ? React.createElement(Comp, { style }) : null;
+};
+
+/* ==================== MOCK DATA ==================== */
+const MOCK_USERS = [
+  { id:1, employeeNo:'000001', name:'张明', companyBelong:'TD', department:'技术研发部', position:'高级开发工程师', rankLevel:'P7', rankingList:'技术榜', totalPoints:156.5, ranking:3, status:1, gender:1, hireDate:'2021-03-15', email:'zhangming@td.com' },
+  { id:2, employeeNo:'000002', name:'李芳', companyBelong:'XD', department:'产品设计部', position:'产品经理', rankLevel:'P6', rankingList:'产品榜', totalPoints:142.0, ranking:5, status:1, gender:2, hireDate:'2022-06-01', email:'lifang@xd.com' },
+  { id:3, employeeNo:'000003', name:'王强', companyBelong:'TY', department:'交付一组', position:'项目经理', rankLevel:'M2', rankingList:'管理榜', totalPoints:189.0, ranking:1, status:1, gender:1, hireDate:'2020-01-10', email:'wangqiang@ty.com' },
+  { id:4, employeeNo:'000004', name:'赵雪', companyBelong:'WB', department:'市场运营部', position:'运营专员', rankLevel:'P4', rankingList:'运营榜', totalPoints:98.5, ranking:12, status:2, gender:2, hireDate:'2023-09-01', email:'zhaoxue@wb.com' },
+  { id:5, employeeNo:'000005', name:'刘洋', companyBelong:'TD', department:'技术研发部', position:'前端开发工程师', rankLevel:'P5', rankingList:'技术榜', totalPoints:121.0, ranking:8, status:1, gender:1, hireDate:'2022-02-14', email:'liuyang@td.com' },
+  { id:6, employeeNo:'000006', name:'陈静', companyBelong:'XD', department:'质量保障部', position:'测试工程师', rankLevel:'P5', rankingList:'技术榜', totalPoints:115.5, ranking:9, status:1, gender:2, hireDate:'2021-07-20', email:'chenjing@xd.com' },
+  { id:7, employeeNo:'000007', name:'孙磊', companyBelong:'TD', department:'交付二组', position:'交付经理', rankLevel:'M1', rankingList:'管理榜', totalPoints:178.0, ranking:2, status:1, gender:1, hireDate:'2019-11-05', email:'sunlei@td.com' },
+  { id:8, employeeNo:'000008', name:'周婷', companyBelong:'TY', department:'人力资源部', position:'HR专员', rankLevel:'P4', rankingList:'运营榜', totalPoints:88.0, ranking:15, status:4, gender:2, hireDate:'2023-03-01', email:'zhouting@ty.com' },
+  { id:9, employeeNo:'000009', name:'吴凡', companyBelong:'WB', department:'市场运营部', position:'市场助理', rankLevel:'P3', rankingList:'运营榜', totalPoints:45.0, ranking:20, status:5, gender:1, hireDate:'2024-01-10', email:'wufan@wb.com' },
+];
+const MOCK_HISTORY = [
+  { id:101, employeeNo:'000051', name:'吴刚', companyBelong:'TD', department:'技术研发部', position:'后端开发', rankLevel:'P6', totalPoints:95.0, status:3 },
+  { id:102, employeeNo:'000052', name:'郑丽', companyBelong:'XD', department:'产品设计部', position:'UI设计师', rankLevel:'P5', totalPoints:72.5, status:3 },
+];
+const MOCK_DEPTS = [
+  { id:1, name:'同盾集团', level:1, memberCount:286, children:[
+    { id:2, name:'技术研发部', level:2, memberCount:85, children:[
+      { id:5, name:'交付一组', level:3, memberCount:20, children:[] },
+      { id:6, name:'交付二组', level:3, memberCount:18, children:[] },
+    ]},
+    { id:3, name:'产品设计部', level:2, memberCount:35, children:[] },
+    { id:4, name:'市场运营部', level:2, memberCount:42, children:[
+      { id:7, name:'质量保障部', level:3, memberCount:15, children:[] },
+      { id:8, name:'人力资源部', level:3, memberCount:12, children:[] },
+    ]},
+  ]},
+];
+const MOCK_RANKING_LISTS = [
+  { id:1, name:'技术榜', description:'技术序列员工排名', topN:10, isActive:1 },
+  { id:2, name:'管理榜', description:'管理序列员工排名', topN:5, isActive:1 },
+  { id:3, name:'产品榜', description:'产品序列员工排名', topN:10, isActive:1 },
+  { id:4, name:'运营榜', description:'运营序列员工排名', topN:10, isActive:0 },
+];
+const MOCK_CATEGORIES = [
+  { id:1, name:'项目交付', description:'项目交付相关管控指标', sortOrder:1, isActive:1 },
+  { id:2, name:'技术能力', description:'技术能力评价指标', sortOrder:2, isActive:1 },
+  { id:3, name:'团队协作', description:'团队协作相关指标', sortOrder:3, isActive:1 },
+  { id:4, name:'创新贡献', description:'创新和特殊贡献', sortOrder:4, isActive:0 },
+];
+const MOCK_INDICATORS = [
+  { id:1, category:'项目交付', name:'按时交付项目', direction:1, scoreType:1, fixedScore:10, pointStatus:2, classification:'项目经理积分' },
+  { id:2, category:'项目交付', name:'项目延期', direction:-1, scoreType:1, fixedScore:5, pointStatus:2, classification:'项目经理积分' },
+  { id:3, category:'技术能力', name:'代码质量优秀', direction:1, scoreType:2, minScore:5, maxScore:15, pointStatus:1, classification:'交付开发积分' },
+  { id:4, category:'技术能力', name:'严重线上Bug', direction:-1, scoreType:1, fixedScore:8, pointStatus:2, classification:'交付开发积分' },
+  { id:5, category:'团队协作', name:'跨部门协作贡献', direction:1, scoreType:2, minScore:3, maxScore:10, pointStatus:1, classification:'通用积分' },
+  { id:6, category:'创新贡献', name:'技术专利申请', direction:1, scoreType:1, fixedScore:20, pointStatus:2, classification:'通用积分' },
+  { id:7, category:'技术能力', name:'主导技术分享', direction:1, scoreType:1, fixedScore:5, pointStatus:2, classification:'交付主管积分' },
+];
+const MOCK_POINTS = [
+  { id:1, user:'张明', employeeNo:'000001', indicator:'按时交付项目', category:'项目交付', score:10, pointStatus:2, belongMonth:'2026-03', auditStatus:1, registrant:'孙磊', registeredAt:'2026-03-10 14:30' },
+  { id:2, user:'李芳', employeeNo:'000002', indicator:'跨部门协作贡献', category:'团队协作', score:8, pointStatus:1, belongMonth:'2026-03', auditStatus:0, registrant:'王强', registeredAt:'2026-03-11 09:15' },
+  { id:3, user:'王强', employeeNo:'000003', indicator:'项目延期', category:'项目交付', score:-5, pointStatus:2, belongMonth:'2026-03', auditStatus:2, registrant:'张明', registeredAt:'2026-03-09 16:00', auditRemark:'情况不属实' },
+  { id:4, user:'刘洋', employeeNo:'000005', indicator:'代码质量优秀', category:'技术能力', score:12, pointStatus:1, belongMonth:'2026-03', auditStatus:0, registrant:'张明', registeredAt:'2026-03-12 10:20' },
+  { id:5, user:'陈静', employeeNo:'000006', indicator:'严重线上Bug', category:'技术能力', score:-8, pointStatus:2, belongMonth:'2026-02', auditStatus:1, registrant:'孙磊', registeredAt:'2026-02-28 11:00' },
+];
+const MOCK_RANKINGS = [
+  { ranking:1, employeeNo:'000003', name:'王强', companyBelong:'TY', department:'交付一组', position:'项目经理', rankLevel:'M2', resultScore:120, processScore:69, totalScore:189, list:'管理榜' },
+  { ranking:2, employeeNo:'000007', name:'孙磊', companyBelong:'TD', department:'交付二组', position:'交付经理', rankLevel:'M1', resultScore:108, processScore:70, totalScore:178, list:'管理榜' },
+  { ranking:3, employeeNo:'000001', name:'张明', companyBelong:'TD', department:'技术研发部', position:'高级开发工程师', rankLevel:'P7', resultScore:96, processScore:60.5, totalScore:156.5, list:'技术榜' },
+  { ranking:4, employeeNo:'000002', name:'李芳', companyBelong:'XD', department:'产品设计部', position:'产品经理', rankLevel:'P6', resultScore:82, processScore:60, totalScore:142, list:'产品榜' },
+  { ranking:5, employeeNo:'000005', name:'刘洋', companyBelong:'TD', department:'技术研发部', position:'前端开发工程师', rankLevel:'P5', resultScore:71, processScore:50, totalScore:121, list:'技术榜' },
+  { ranking:6, employeeNo:'000006', name:'陈静', companyBelong:'XD', department:'质量保障部', position:'测试工程师', rankLevel:'P5', resultScore:65.5, processScore:50, totalScore:115.5, list:'技术榜' },
+  { ranking:7, employeeNo:'000004', name:'赵雪', companyBelong:'WB', department:'市场运营部', position:'运营专员', rankLevel:'P4', resultScore:58.5, processScore:40, totalScore:98.5, list:'运营榜' },
+  { ranking:8, employeeNo:'000008', name:'周婷', companyBelong:'TY', department:'人力资源部', position:'HR专员', rankLevel:'P4', resultScore:48, processScore:40, totalScore:88, list:'运营榜' },
+];
+const MOCK_BLACK_RANKINGS = [
+  { ranking:1, employeeNo:'000009', name:'吴凡', companyBelong:'WB', department:'市场运营部', position:'市场助理', rankLevel:'P3', resultScore:25, processScore:20, totalScore:45, list:'运营榜', mainDeduct:'迟到早退' },
+  { ranking:2, employeeNo:'000008', name:'周婷', companyBelong:'TY', department:'人力资源部', position:'HR专员', rankLevel:'P4', resultScore:48, processScore:40, totalScore:88, list:'运营榜', mainDeduct:'文档错误' },
+  { ranking:3, employeeNo:'000004', name:'赵雪', companyBelong:'WB', department:'市场运营部', position:'运营专员', rankLevel:'P4', resultScore:58.5, processScore:40, totalScore:98.5, list:'运营榜', mainDeduct:'客户投诉' },
+];
+const MOCK_STARS = [
+  { id:1, displayOrder:1, user:'王强', dept:'交付一组', list:'管理榜', comment:'季度内带领团队完成3个重大项目交付，效率提升30%', avatar:'王' },
+  { id:2, displayOrder:2, user:'张明', dept:'技术研发部', list:'技术榜', comment:'主导完成核心系统重构，性能提升200%', avatar:'张' },
+  { id:3, displayOrder:3, user:'孙磊', dept:'交付二组', list:'管理榜', comment:'培养新人3名，团队满意度达到95%', avatar:'孙' },
+  { id:4, displayOrder:4, user:'李芳', dept:'产品设计部', list:'产品榜', comment:'设计的新功能上线后用户好评率92%', avatar:'李' },
+];
+
+const COMPANY_COLORS = { TD:'blue', XD:'green', TY:'purple', WB:'orange' };
+const STATUS_MAP = { 1:'在职', 2:'禁用', 3:'离职', 4:'待岗', 5:'停薪留职' };
+const STATUS_COLORS = { 1:'green', 2:'red', 3:'default', 4:'orange', 5:'gold' };
+const AUDIT_MAP = { 0:'待审核', 1:'已通过', 2:'已驳回' };
+const AUDIT_COLORS = { 0:'orange', 1:'green', 2:'red' };
+const RANK_COLORS = { 1:'#faad14', 2:'#bfbfbf', 3:'#d48806' };
+const CLASSIFICATIONS = ['项目经理积分','通用积分','交付开发积分','交付主管积分'];
+
+/* ==================== SHARED: Field Management Drawer (增删改查) ==================== */
+function FieldManageDrawer({ open, onClose, fields, title, onSave }) {
+  const [items, setItems] = useState(fields || []);
+  const [addOpen, setAddOpen] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [newLabel, setNewLabel] = useState('');
+  const [newType, setNewType] = useState('text');
+  useEffect(() => { if(open) setItems(fields || []); }, [open, fields]);
+  const moveUp = i => { if(i===0) return; const a=[...items]; [a[i-1],a[i]]=[a[i],a[i-1]]; setItems(a); };
+  const moveDown = i => { if(i===items.length-1) return; const a=[...items]; [a[i],a[i+1]]=[a[i+1],a[i]]; setItems(a); };
+  const toggle = i => { const a=[...items]; a[i]={...a[i],visible:!a[i].visible}; setItems(a); };
+  const removeField = i => { const a=[...items]; a.splice(i,1); setItems(a); message.success('字段已删除'); };
+  const handleAdd = () => {
+    if(!newLabel.trim()){ message.error('请输入字段名称'); return; }
+    if(items.some(f=>f.label===newLabel.trim())){ message.error('字段名称已存在'); return; }
+    setItems([...items, { key:'custom_'+Date.now(), label:newLabel.trim(), visible:true, custom:true, fieldType:newType }]);
+    setNewLabel(''); setNewType('text'); setAddOpen(false);
+    message.success('字段已添加');
+  };
+  const handleEditSave = () => {
+    if(!newLabel.trim()){ message.error('请输入字段名称'); return; }
+    const a=[...items]; a[editItem.index]={...a[editItem.index], label:newLabel.trim()}; setItems(a);
+    setEditItem(null); setNewLabel('');
+    message.success('字段已修改');
+  };
+  const startEdit = (f,i) => { setEditItem({...f, index:i}); setNewLabel(f.label); };
+  return (
+    <Drawer title={title||'字段管理'} width={460} open={open} onClose={onClose}
+      extra={<Space>
+        <Button icon={I('PlusOutlined')} onClick={()=>{setNewLabel('');setNewType('text');setAddOpen(true);}}>新增字段</Button>
+        <Button type="primary" onClick={()=>{message.success('字段配置已保存'); if(onSave) onSave(items); onClose();}}>保存</Button>
+      </Space>}>
+      <Alert message="支持新增自定义字段、删除非必选字段、调整顺序和显隐" type="info" showIcon style={{marginBottom:16}} />
+      <div style={{marginBottom:8,display:'flex',justifyContent:'space-between',color:'#8c8c8c',fontSize:12,padding:'0 12px'}}>
+        <span>字段名称</span><span>排序 / 显隐 / 操作</span>
+      </div>
+      {items.map((f,i)=>(
+        <div key={f.key||i} className="field-manage-row" style={{background:f.custom?'#f6ffed':'transparent'}}>
+          <Space>
+            <span style={{width:20,textAlign:'center',color:'#8c8c8c',fontSize:12}}>{i+1}</span>
+            <span style={{fontWeight:f.visible?600:400, color:f.visible?'#1a1a2e':'#bfbfbf'}}>{f.label}</span>
+            {f.required && <Tag color="red" style={{fontSize:10}}>必选</Tag>}
+            {f.custom && <Tag color="green" style={{fontSize:10}}>自定义</Tag>}
+            {f.fieldType && f.custom && <Tag style={{fontSize:10}}>{f.fieldType==='text'?'文本':f.fieldType==='number'?'数字':f.fieldType==='select'?'下拉':f.fieldType==='date'?'日期':'文本'}</Tag>}
+          </Space>
+          <Space size={2}>
+            <Button type="text" size="small" disabled={i===0} onClick={()=>moveUp(i)}>{I('UpOutlined')}</Button>
+            <Button type="text" size="small" disabled={i===items.length-1} onClick={()=>moveDown(i)}>{I('DownOutlined')}</Button>
+            <Switch size="small" checked={f.visible} disabled={f.required} onChange={()=>toggle(i)} />
+            <Tooltip title="编辑字段名"><Button type="text" size="small" onClick={()=>startEdit(f,i)}>{I('EditOutlined')}</Button></Tooltip>
+            {!f.required ? (
+              <Popconfirm title="确认删除该字段？" onConfirm={()=>removeField(i)}>
+                <Button type="text" size="small" danger>{I('DeleteOutlined')}</Button>
+              </Popconfirm>
+            ) : <Button type="text" size="small" disabled>{I('DeleteOutlined')}</Button>}
+          </Space>
+        </div>
+      ))}
+      {/* 新增字段弹窗 */}
+      <Modal open={addOpen} title={<span>{I('PlusCircleOutlined',{marginRight:6})}新增自定义字段</span>} width={400}
+        onCancel={()=>setAddOpen(false)} onOk={handleAdd} okText="添加">
+        <Form layout="vertical" style={{marginTop:16}}>
+          <Form.Item label="字段名称" required>
+            <Input value={newLabel} onChange={e=>setNewLabel(e.target.value)} placeholder="如：毕业院校、紧急联系人" />
+          </Form.Item>
+          <Form.Item label="字段类型">
+            <Select value={newType} onChange={setNewType}>
+              <Option value="text">文本</Option>
+              <Option value="number">数字</Option>
+              <Option value="select">下拉选择</Option>
+              <Option value="date">日期</Option>
+            </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
+      {/* 编辑字段弹窗 */}
+      <Modal open={!!editItem} title={<span>{I('EditOutlined',{marginRight:6})}编辑字段</span>} width={400}
+        onCancel={()=>setEditItem(null)} onOk={handleEditSave} okText="保存">
+        <Form layout="vertical" style={{marginTop:16}}>
+          <Form.Item label="字段名称" required>
+            <Input value={newLabel} onChange={e=>setNewLabel(e.target.value)} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </Drawer>
+  );
+}
+
+/* ==================== SHARED: AI Analysis Drawer ==================== */
+function AiAnalysisDrawer({ open, onClose, chartType, summary }) {
+  return (
+    <Drawer title={`AI 分析 — ${chartType}`} width={480} open={open} onClose={onClose}>
+      <Alert message="AI 分析功能即将上线（Phase 5）" type="warning" showIcon style={{marginBottom:16}} />
+      <div style={{background:'#f6f8fa',borderRadius:8,padding:16,marginBottom:16}}>
+        <Text strong>数据摘要</Text>
+        <p style={{marginTop:8,color:'#595959',lineHeight:1.8}}>{summary || '当前图表数据正常，暂无异常波动。'}</p>
+      </div>
+      <div style={{background:'#f0f5ff',borderRadius:8,padding:16}}>
+        <Text strong style={{color:'#1890ff'}}>预计分析能力</Text>
+        <ul style={{marginTop:8,color:'#595959',paddingLeft:20,lineHeight:2}}>
+          <li>数据趋势总结</li>
+          <li>异常点自动发现</li>
+          <li>改善建议生成</li>
+          <li>与上期数据对比结论</li>
+        </ul>
+      </div>
+    </Drawer>
+  );
+}
+
+/* ==================== ECharts helper ==================== */
+function EChart({ option, style }) {
+  const ref = useRef(null);
+  const chartRef = useRef(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    if (!chartRef.current) chartRef.current = echarts.init(ref.current);
+    chartRef.current.setOption(option, true);
+    const onResize = () => chartRef.current?.resize();
+    window.addEventListener('resize', onResize);
+    return () => { window.removeEventListener('resize', onResize); };
+  }, [option]);
+  return React.createElement('div', { ref, style: { width:'100%', height:'100%', ...style } });
+}
+
+/* ==================== PAGE COMPONENTS ==================== */
+
+function LoginPage({ onLogin }) {
+  return (
+    <div className="login-bg">
+      <div className="login-card">
+        <div className="login-title">{I('SafetyCertificateOutlined',{fontSize:28,marginRight:8,verticalAlign:'middle',color:'#667eea'})}积分管理系统</div>
+        <div className="login-sub">企业版 v2.1</div>
+        <Form layout="vertical" onFinish={() => onLogin()}>
+          <Form.Item label="工号" name="employeeNo" rules={[{required:true,message:'请输入工号'}]} initialValue="000001">
+            <Input size="large" prefix={I('UserOutlined')} placeholder="请输入工号" />
+          </Form.Item>
+          <Form.Item label="密码" name="password" rules={[{required:true,message:'请输入密码'}]} initialValue="admin123">
+            <Input.Password size="large" prefix={I('LockOutlined')} placeholder="请输入密码" />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" size="large" block>{I('LoginOutlined')} 登 录</Button>
+          </Form.Item>
+          <div style={{textAlign:'center',color:'#8c8c8c',fontSize:12}}>测试账号: 000001 / admin123</div>
+        </Form>
+      </div>
+    </div>
+  );
+}
+
+function DashboardPage() {
+  const stats = [
+    { label:'在职员工', value:'286', color:'#1890ff', icon:'TeamOutlined' },
+    { label:'本月录入', value:'147', color:'#52c41a', icon:'FileAddOutlined' },
+    { label:'指标总数', value:'42', color:'#faad14', icon:'AimOutlined' },
+    { label:'榜单数量', value:'4', color:'#722ed1', icon:'TrophyOutlined' },
+  ];
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('DashboardOutlined',{marginRight:8})}工作台</h2></div>
+      <Row gutter={16} style={{marginBottom:24}}>
+        {stats.map(s => (
+          <Col span={6} key={s.label}>
+            <div className="stat-card" style={{display:'flex',alignItems:'center',gap:16}}>
+              <div style={{width:48,height:48,borderRadius:12,background:`${s.color}15`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                {I(s.icon,{fontSize:24,color:s.color})}
+              </div>
+              <div style={{textAlign:'left'}}>
+                <div className="stat-value" style={{color:s.color,fontSize:24}}>{s.value}</div>
+                <div className="stat-label">{s.label}</div>
+              </div>
+            </div>
+          </Col>
+        ))}
+      </Row>
+      <div className="card-box">
+        <Title level={4}>{I('HomeOutlined',{marginRight:8})}欢迎使用积分管理系统-企业版</Title>
+        <p style={{color:'#595959',marginTop:8}}>系统支持 TD、XD、TY、WB 四公司融合人员的统一积分评价。</p>
+        <p style={{color:'#595959',marginTop:4}}>v2.1 新增：管理驾驶舱、黑榜/倒数榜、字段灵活管理、AI 分析预留。</p>
+      </div>
+    </div>
+  );
+}
+
+/* ==================== COCKPIT ==================== */
+function CockpitPage() {
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiChart, setAiChart] = useState('');
+  const openAi = (name) => { setAiChart(name); setAiOpen(true); };
+
+  const trendOption = {
+    tooltip:{trigger:'axis'},
+    legend:{data:['总净值','总加分','总扣分','人均积分'],top:0},
+    grid:{left:50,right:20,top:40,bottom:30},
+    xAxis:{type:'category',data:['2025-10','2025-11','2025-12','2026-01','2026-02','2026-03']},
+    yAxis:{type:'value'},
+    series:[
+      {name:'总净值',type:'line',smooth:true,data:[4200,4800,4500,5100,5300,5680],itemStyle:{color:'#1890ff'}},
+      {name:'总加分',type:'line',smooth:true,data:[5800,6200,6000,6500,6800,7100],itemStyle:{color:'#52c41a'}},
+      {name:'总扣分',type:'line',smooth:true,data:[1600,1400,1500,1400,1500,1420],itemStyle:{color:'#ff4d4f'}},
+      {name:'人均积分',type:'line',smooth:true,data:[15.2,17.4,16.3,18.5,19.2,20.6],yAxisIndex:0,itemStyle:{color:'#faad14'},lineStyle:{type:'dashed'}},
+    ]
+  };
+
+  const deptOption = {
+    tooltip:{trigger:'axis'},
+    legend:{data:['总净值','平均分','总加分','总扣分'],top:0},
+    grid:{left:60,right:20,top:40,bottom:30},
+    xAxis:{type:'category',data:['技术研发部','产品设计部','市场运营部','交付一组','交付二组','质量保障部','人力资源部']},
+    yAxis:{type:'value'},
+    series:[
+      {name:'总净值',type:'bar',data:[1820,680,520,890,780,420,370],itemStyle:{color:'#1890ff'}},
+      {name:'平均分',type:'bar',data:[21.4,19.4,12.4,44.5,43.3,28.0,30.8],itemStyle:{color:'#722ed1'}},
+      {name:'总加分',type:'bar',data:[2400,920,780,1200,1050,600,520],itemStyle:{color:'#52c41a'}},
+      {name:'总扣分',type:'bar',data:[580,240,260,310,270,180,150],itemStyle:{color:'#ff4d4f'}},
+    ]
+  };
+
+  const pieOption = {
+    tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},
+    legend:{orient:'vertical',left:'left',top:'middle'},
+    series:[{
+      type:'pie',radius:['40%','70%'],center:['60%','50%'],
+      data:[
+        {value:7100,name:'总加分',itemStyle:{color:'#52c41a'}},
+        {value:1420,name:'总扣分',itemStyle:{color:'#ff4d4f'}},
+      ],
+      label:{formatter:'{b}\n{d}%'}
+    }]
+  };
+
+  const categoryOption = {
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+    grid:{left:100,right:40,top:10,bottom:30},
+    xAxis:{type:'value'},
+    yAxis:{type:'category',data:['创新贡献','团队协作','技术能力','项目交付'].reverse()},
+    series:[
+      {name:'加分',type:'bar',stack:'total',data:[320,680,1850,2400].reverse(),itemStyle:{color:'#1890ff'}},
+      {name:'扣分',type:'bar',stack:'total',data:[-80,-120,-580,-640].reverse(),itemStyle:{color:'#ff4d4f'}},
+    ]
+  };
+
+  const dimOption = {
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+    grid:{left:140,right:40,top:10,bottom:30},
+    xAxis:{type:'value'},
+    yAxis:{type:'category',data:['技术专利申请','跨部门协作贡献','严重线上Bug','代码质量优秀','项目延期','按时交付项目'].reverse()},
+    series:[
+      {name:'加分',type:'bar',stack:'total',data:[420,580,0,1200,0,2400].reverse(),itemStyle:{color:'#1890ff'}},
+      {name:'扣分',type:'bar',stack:'total',data:[0,0,-480,0,-640,0].reverse(),itemStyle:{color:'#ff4d4f'}},
+    ]
+  };
+
+  const orgOption = {
+    tooltip:{},
+    legend:{data:['总净值','人均分'],top:0},
+    radar:{indicator:[
+      {name:'TD',max:3000},{name:'XD',max:3000},{name:'TY',max:3000},{name:'WB',max:3000}
+    ]},
+    series:[{
+      type:'radar',
+      data:[
+        {value:[2600,1100,1260,890],name:'总净值',itemStyle:{color:'#1890ff'}},
+        {value:[21.4,19.4,44.5,12.4],name:'人均分',itemStyle:{color:'#52c41a'}},
+      ]
+    }]
+  };
+
+  const anomalies = [
+    { level:'red', text:'赵雪(000004) 本月累计扣分 28 分，超出阈值 30 接近预警', dept:'市场运营部' },
+    { level:'orange', text:'质量保障部 平均分偏离全公司均值 -2.1 个标准差', dept:'质量保障部' },
+    { level:'gold', text:'指标「技术专利申请」已连续 4 个月无录入记录', dept:'-' },
+    { level:'gold', text:'3 条积分记录待审核超过 3 天未处理', dept:'-' },
+  ];
+
+  const bottomWarning = [
+    { name:'吴凡', dept:'市场运营部', score:45, ranking:20, months:3, risk:'高危' },
+    { name:'周婷', dept:'人力资源部', score:88, ranking:15, months:2, risk:'预警' },
+    { name:'赵雪', dept:'市场运营部', score:98.5, ranking:12, months:1, risk:'关注' },
+  ];
+
+  const kpiData = [
+    { label:'全公司积分总量', value:'5,680', change:'+7.2%', up:true, color:'#1890ff' },
+    { label:'总加分', value:'7,100', change:'+4.4%', up:true, color:'#52c41a' },
+    { label:'总扣分', value:'-1,420', change:'-5.3%', up:false, color:'#ff4d4f' },
+    { label:'人均积分', value:'20.6', change:'+7.3%', up:true, color:'#722ed1' },
+    { label:'参与排名人数', value:'276', change:'96.5%', up:true, color:'#13c2c2' },
+    { label:'本月录入条数', value:'147', change:'+12.1%', up:true, color:'#faad14' },
+    { label:'待审核条数', value:'23', change:'3条超时', up:false, color:'#fa8c16' },
+    { label:'活跃榜单', value:'3/4', change:'75%', up:true, color:'#a0d911' },
+  ];
+
+  return (
+    <div className="page-container">
+      <div className="page-header" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <h2>{I('DashboardOutlined',{marginRight:8})}管理驾驶舱</h2>
+        <Space>
+          <Select defaultValue="month" style={{width:100}}>
+            <Option value="month">月度</Option><Option value="quarter">季度</Option><Option value="year">年度</Option>
+          </Select>
+          <DatePicker picker="month" defaultValue={dayjs()} style={{width:140}} />
+          <Select placeholder="全部部门" allowClear style={{width:140}}>
+            {['技术研发部','产品设计部','市场运营部','交付一组','交付二组'].map(d=><Option key={d}>{d}</Option>)}
+          </Select>
+          <Tooltip title="刷新数据"><Button icon={I('ReloadOutlined')} onClick={()=>message.success('数据已刷新')} /></Tooltip>
+          <Dropdown menu={{items:[
+            {key:'pdf',label:'导出驾驶舱快照 (PDF)',icon:I('FilePdfOutlined')},
+            {key:'excel',label:'导出数据明细 (Excel)',icon:I('FileExcelOutlined')},
+            {key:'center',label:'报表中心',icon:I('FolderOpenOutlined')},
+          ],onClick:({key})=>message.info(`${key} 功能开发中`)}}>
+            <Button type="primary" icon={I('ExportOutlined')}>导出</Button>
+          </Dropdown>
+        </Space>
+      </div>
+
+      {/* KPI Cards */}
+      <Row gutter={[12,12]} style={{marginBottom:20}}>
+        {kpiData.map((k,i)=>(
+          <Col span={6} key={i}>
+            <div className="kpi-card" style={{borderLeftColor:k.color}}>
+              <div className="kpi-label">{k.label}</div>
+              <div className="kpi-value" style={{color:k.color}}>{k.value}</div>
+              <div className="kpi-change" style={{color:k.up?'#52c41a':'#ff4d4f'}}>
+                {k.up ? I('ArrowUpOutlined',{fontSize:10}) : I('ArrowDownOutlined',{fontSize:10})} {k.change} 较上期
+              </div>
+            </div>
+          </Col>
+        ))}
+      </Row>
+
+      {/* Core Charts Row 1 */}
+      <Row gutter={16} style={{marginBottom:16}}>
+        <Col span={12}>
+          <div className="chart-box">
+            <div className="chart-title">
+              <span>{I('LineChartOutlined',{marginRight:6})}积分趋势</span>
+              <Button type="link" size="small" onClick={()=>openAi('积分趋势')}>{I('RobotOutlined')} AI 分析</Button>
+            </div>
+            <EChart option={trendOption} style={{height:320}} />
+          </div>
+        </Col>
+        <Col span={12}>
+          <div className="chart-box">
+            <div className="chart-title">
+              <span>{I('BarChartOutlined',{marginRight:6})}各部门积分对比</span>
+              <Button type="link" size="small" onClick={()=>openAi('各部门积分对比')}>{I('RobotOutlined')} AI 分析</Button>
+            </div>
+            <EChart option={deptOption} style={{height:320}} />
+          </div>
+        </Col>
+      </Row>
+
+      {/* Charts Row 2 */}
+      <Row gutter={16} style={{marginBottom:16}}>
+        <Col span={12}>
+          <div className="chart-box">
+            <div className="chart-title">
+              <span>{I('PieChartOutlined',{marginRight:6})}加分/扣分占比</span>
+              <Button type="link" size="small" onClick={()=>openAi('加分/扣分占比')}>{I('RobotOutlined')} AI 分析</Button>
+            </div>
+            <EChart option={pieOption} style={{height:320}} />
+          </div>
+        </Col>
+        <Col span={12}>
+          <div className="chart-box">
+            <div className="chart-title">
+              <span>{I('BarChartOutlined',{marginRight:6})}管控项总分排行</span>
+              <Button type="link" size="small" onClick={()=>openAi('管控项总分排行')}>{I('RobotOutlined')} AI 分析</Button>
+            </div>
+            <EChart option={categoryOption} style={{height:320}} />
+          </div>
+        </Col>
+      </Row>
+
+      {/* Charts Row 3 */}
+      <Row gutter={16} style={{marginBottom:16}}>
+        <Col span={12}>
+          <div className="chart-box">
+            <div className="chart-title">
+              <span>{I('BarChartOutlined',{marginRight:6})}评价维度总分排行</span>
+              <Button type="link" size="small" onClick={()=>openAi('评价维度总分排行')}>{I('RobotOutlined')} AI 分析</Button>
+            </div>
+            <EChart option={dimOption} style={{height:320}} />
+          </div>
+        </Col>
+        <Col span={12}>
+          <div className="chart-box">
+            <div className="chart-title">
+              <span>{I('RadarChartOutlined',{marginRight:6})}归属组织积分对比</span>
+              <Button type="link" size="small" onClick={()=>openAi('归属组织积分对比')}>{I('RobotOutlined')} AI 分析</Button>
+            </div>
+            <EChart option={orgOption} style={{height:320}} />
+          </div>
+        </Col>
+      </Row>
+
+      {/* Insights Row */}
+      <Row gutter={16} style={{marginBottom:16}}>
+        <Col span={8}>
+          <div className="insight-card" style={{height:360}}>
+            <div className="insight-title" style={{display:'flex',justifyContent:'space-between'}}>
+              <span>{I('HeartOutlined',{marginRight:6,color:'#52c41a'})}团队健康度评分</span>
+              <Button type="link" size="small" onClick={()=>openAi('团队健康度评分')}>{I('RobotOutlined')} AI</Button>
+            </div>
+            <div style={{textAlign:'center',margin:'16px 0'}}>
+              <Progress type="dashboard" percent={73} strokeColor={{0:'#108ee9','100%':'#87d068'}} format={p=><span style={{fontSize:28,fontWeight:700}}>{p}</span>} width={120} />
+              <div style={{color:'#52c41a',fontWeight:600,marginTop:4}}>良好</div>
+            </div>
+            <Row gutter={8}>
+              {[{l:'平均分水平',v:78},{l:'加分活跃度',v:82},{l:'扣分控制',v:65},{l:'参与覆盖率',v:96},{l:'趋势稳定性',v:71}].map(d=>(
+                <Col span={12} key={d.l} style={{marginBottom:6}}>
+                  <div style={{fontSize:11,color:'#8c8c8c'}}>{d.l}</div>
+                  <Progress percent={d.v} size="small" strokeColor={d.v>70?'#52c41a':d.v>40?'#faad14':'#ff4d4f'} />
+                </Col>
+              ))}
+            </Row>
+          </div>
+        </Col>
+        <Col span={8}>
+          <div className="insight-card" style={{height:360,overflowY:'auto'}}>
+            <div className="insight-title">{I('WarningOutlined',{marginRight:6,color:'#fa8c16'})}异常数据提醒</div>
+            {anomalies.map((a,i)=>(
+              <div key={i} className="anomaly-item" style={{background:a.level==='red'?'#fff2f0':a.level==='orange'?'#fff7e6':'#fffbe6'}}>
+                <Tag color={a.level} style={{flexShrink:0}}>{a.level==='red'?'严重':a.level==='orange'?'警告':'提醒'}</Tag>
+                <span style={{fontSize:12,flex:1}}>{a.text}</span>
+              </div>
+            ))}
+          </div>
+        </Col>
+        <Col span={8}>
+          <div className="insight-card" style={{height:360,overflowY:'auto'}}>
+            <div className="insight-title" style={{display:'flex',justifyContent:'space-between'}}>
+              <span>{I('AlertOutlined',{marginRight:6,color:'#ff4d4f'})}积分与绩效关联（末位预警）</span>
+              <Button type="link" size="small" onClick={()=>openAi('末位预警')}>{I('RobotOutlined')} AI</Button>
+            </div>
+            <Table dataSource={bottomWarning} rowKey="name" size="small" pagination={false} columns={[
+              { title:'姓名', dataIndex:'name', width:50 },
+              { title:'部门', dataIndex:'dept', width:80, ellipsis:true },
+              { title:'积分', dataIndex:'score', width:50 },
+              { title:'连续', dataIndex:'months', width:40, render:v=>`${v}月` },
+              { title:'风险', dataIndex:'risk', width:55, render:v=><Tag color={v==='高危'?'red':v==='预警'?'orange':'blue'}>{v}</Tag> },
+            ]} />
+            <div style={{fontSize:11,color:'#8c8c8c',marginTop:8,padding:'8px',background:'#fff1f0',borderRadius:4}}>
+              {I('InfoCircleOutlined',{marginRight:4})}末位人员可能影响未来绩效评定与奖金分配，建议关注并干预
+            </div>
+          </div>
+        </Col>
+      </Row>
+
+      {/* Bottom Tabs */}
+      <div className="card-box">
+        <Tabs items={[
+          { key:'top', label:<span>{I('TrophyOutlined',{marginRight:4})}排名 Top10</span>, children:(
+            <Table dataSource={MOCK_RANKINGS.slice(0,10)} rowKey="ranking" size="small" pagination={false} columns={[
+              { title:'排名', dataIndex:'ranking', width:60, render:v=>v<=3?<span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:24,height:24,borderRadius:'50%',color:'#fff',fontWeight:700,fontSize:12,background:RANK_COLORS[v]}}>{v}</span>:v },
+              { title:'姓名', dataIndex:'name', width:60 },
+              { title:'部门', dataIndex:'department', width:100 },
+              { title:'归属', dataIndex:'companyBelong', width:50, render:v=><Tag color={COMPANY_COLORS[v]}>{v}</Tag> },
+              { title:'总分', dataIndex:'totalScore', width:70, render:v=><span style={{fontWeight:700,color:'#52c41a'}}>{v}</span> },
+              { title:'加分', dataIndex:'resultScore', width:60, render:v=><span style={{color:'#1890ff'}}>{v}</span> },
+              { title:'过程分', dataIndex:'processScore', width:60 },
+            ]} />
+          )},
+          { key:'bottom', label:'黑榜 Top10', children:(
+            <Table dataSource={MOCK_BLACK_RANKINGS} rowKey="ranking" size="small" pagination={false} columns={[
+              { title:'倒数', dataIndex:'ranking', width:60, render:v=><Badge count={v} style={{background:'#ff4d4f'}} /> },
+              { title:'姓名', dataIndex:'name', width:60 },
+              { title:'部门', dataIndex:'department', width:100 },
+              { title:'归属', dataIndex:'companyBelong', width:50, render:v=><Tag color={COMPANY_COLORS[v]}>{v}</Tag> },
+              { title:'总分', dataIndex:'totalScore', width:70, render:v=><span style={{fontWeight:700,color:'#ff4d4f'}}>{v}</span> },
+              { title:'主要扣分维度', dataIndex:'mainDeduct', width:100 },
+            ]} />
+          )},
+          { key:'dept', label:'部门积分概览', children:(
+            <Table dataSource={[
+              { dept:'技术研发部',count:85,total:1820,avg:21.4,plus:2400,minus:580,max:156.5,min:45 },
+              { dept:'交付一组',count:20,total:890,avg:44.5,plus:1200,minus:310,max:189,min:65 },
+              { dept:'交付二组',count:18,total:780,avg:43.3,plus:1050,minus:270,max:178,min:58 },
+              { dept:'产品设计部',count:35,total:680,avg:19.4,plus:920,minus:240,max:142,min:32 },
+              { dept:'市场运营部',count:42,total:520,avg:12.4,plus:780,minus:260,max:98.5,min:22 },
+              { dept:'质量保障部',count:15,total:420,avg:28.0,plus:600,minus:180,max:115.5,min:40 },
+              { dept:'人力资源部',count:12,total:370,avg:30.8,plus:520,minus:150,max:88,min:35 },
+            ]} rowKey="dept" size="small" pagination={false} columns={[
+              { title:'部门', dataIndex:'dept', width:120 },
+              { title:'人数', dataIndex:'count', width:50 },
+              { title:'总净值', dataIndex:'total', width:70, sorter:(a,b)=>a.total-b.total, defaultSortOrder:'descend' },
+              { title:'平均分', dataIndex:'avg', width:60 },
+              { title:'总加分', dataIndex:'plus', width:70, render:v=><span style={{color:'#52c41a'}}>+{v}</span> },
+              { title:'总扣分', dataIndex:'minus', width:70, render:v=><span style={{color:'#ff4d4f'}}>-{v}</span> },
+              { title:'最高分', dataIndex:'max', width:60 },
+              { title:'最低分', dataIndex:'min', width:60 },
+            ]} />
+          )},
+          { key:'category', label:'管控项明细', children:(
+            <Table dataSource={[
+              { cat:'项目交付',dims:2,count:48,plus:2400,minus:640,net:1760 },
+              { cat:'技术能力',dims:3,count:35,plus:1850,minus:580,net:1270 },
+              { cat:'团队协作',dims:1,count:22,plus:680,minus:120,net:560 },
+              { cat:'创新贡献',dims:1,count:8,plus:320,minus:80,net:240 },
+            ]} rowKey="cat" size="small" pagination={false} columns={[
+              { title:'管控项', dataIndex:'cat', width:100 },
+              { title:'关联维度数', dataIndex:'dims', width:80 },
+              { title:'录入总次数', dataIndex:'count', width:80 },
+              { title:'总加分', dataIndex:'plus', width:70, render:v=><span style={{color:'#52c41a'}}>+{v}</span> },
+              { title:'总扣分', dataIndex:'minus', width:70, render:v=><span style={{color:'#ff4d4f'}}>-{v}</span> },
+              { title:'净值', dataIndex:'net', width:70, render:v=><span style={{fontWeight:700,color:'#1890ff'}}>{v}</span> },
+            ]} />
+          )},
+        ]} />
+      </div>
+
+      <AiAnalysisDrawer open={aiOpen} onClose={()=>setAiOpen(false)} chartType={aiChart}
+        summary={`当前「${aiChart}」数据整体呈上升趋势，技术研发部表现突出，市场运营部需关注扣分占比偏高的问题。`} />
+    </div>
+  );
+}
+
+/* ==================== EMPLOYEE MANAGEMENT ==================== */
+function CurrentUserListPage() {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [fieldOpen, setFieldOpen] = useState(false);
+  const [users, setUsers] = useState(MOCK_USERS.map(u=>({...u})));
+  const changeStatus = (id, newStatus, label) => {
+    setUsers(prev => prev.map(u => u.id===id ? {...u, status:newStatus} : u));
+    const user = users.find(u=>u.id===id);
+    message.success(<span><strong>{user?.name}</strong> 已{label}
+      {newStatus===2 && ' — 不再参与积分排名'}
+      {newStatus===1 && ' — 已恢复参与积分排名'}
+    </span>);
+  };
+  const leaveUser = (id) => {
+    setUsers(prev => prev.filter(u => u.id!==id));
+    message.success('已移入历史员工');
+  };
+  const userFields = [
+    { key:'employeeNo', label:'工号', visible:true, required:true },
+    { key:'name', label:'姓名', visible:true, required:true },
+    { key:'companyBelong', label:'归属组织', visible:true },
+    { key:'department', label:'部门', visible:true },
+    { key:'position', label:'岗位', visible:true },
+    { key:'rankLevel', label:'职级', visible:true },
+    { key:'rankingList', label:'所属榜单', visible:true },
+    { key:'totalPoints', label:'积分', visible:true },
+    { key:'ranking', label:'排名', visible:true },
+    { key:'status', label:'状态', visible:true },
+    { key:'gender', label:'性别', visible:false },
+    { key:'hireDate', label:'入职日期', visible:false },
+    { key:'email', label:'邮箱', visible:false },
+  ];
+  const activeCount = users.filter(u=>u.status===1).length;
+  const disabledCount = users.filter(u=>u.status===2).length;
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('TeamOutlined',{marginRight:8})}员工管理</h2></div>
+      {/* Status summary bar */}
+      <Row gutter={12} style={{marginBottom:16}}>
+        {[
+          {label:'全部',count:users.length,color:'#1890ff'},
+          {label:'在职(参与排名)',count:activeCount,color:'#52c41a'},
+          {label:'禁用(不参与排名)',count:disabledCount,color:'#ff4d4f'},
+          {label:'待岗',count:users.filter(u=>u.status===4).length,color:'#fa8c16'},
+          {label:'停薪留职',count:users.filter(u=>u.status===5).length,color:'#d4b106'},
+        ].map(s=>(
+          <Col flex="1" key={s.label}>
+            <div style={{background:'#fff',borderRadius:6,padding:'8px 12px',textAlign:'center',borderBottom:`3px solid ${s.color}`}}>
+              <div style={{fontSize:20,fontWeight:700,color:s.color}}>{s.count}</div>
+              <div style={{fontSize:11,color:'#8c8c8c'}}>{s.label}</div>
+            </div>
+          </Col>
+        ))}
+      </Row>
+      <div className="card-box">
+        <div className="filter-bar">
+          <Search placeholder="搜索工号/姓名" style={{width:220}} prefix={I('SearchOutlined')} />
+          <Select placeholder="状态" style={{width:120}} allowClear>
+            <Option value={1}>在职</Option><Option value={2}>禁用</Option><Option value={4}>待岗</Option><Option value={5}>停薪留职</Option>
+          </Select>
+          <Select placeholder="归属组织" style={{width:120}} allowClear>
+            <Option value="TD">TD</Option><Option value="XD">XD</Option><Option value="TY">TY</Option><Option value="WB">WB</Option>
+          </Select>
+        </div>
+        <div className="table-actions">
+          <Space>
+            <Button type="primary" icon={I('PlusOutlined')} onClick={()=>setModalOpen(true)}>新增员工</Button>
+            <Button icon={I('ExportOutlined')}>导出</Button>
+            <Button icon={I('DownloadOutlined')}>模板下载</Button>
+            <Button icon={I('UploadOutlined')}>批量导入</Button>
+            <Tooltip title="字段管理"><Button icon={I('SettingOutlined')} onClick={()=>setFieldOpen(true)} /></Tooltip>
+          </Space>
+          <span style={{color:'#8c8c8c'}}>共 {users.length} 人</span>
+        </div>
+        <Table dataSource={users} rowKey="id" size="middle" pagination={{pageSize:20,showTotal:t=>`共 ${t} 人`}}
+          rowClassName={r=>r.status===2?'ant-table-row-disabled':''}
+          columns={[
+            { title:'工号', dataIndex:'employeeNo', width:90 },
+            { title:'姓名', dataIndex:'name', width:70, render:(v,r)=><span style={{opacity:r.status===2?0.45:1}}>{v}</span> },
+            { title:'归属', dataIndex:'companyBelong', width:60, render:v=><Tag color={COMPANY_COLORS[v]}>{v}</Tag> },
+            { title:'部门', dataIndex:'department', width:120, ellipsis:true },
+            { title:'岗位', dataIndex:'position', width:140, ellipsis:true },
+            { title:'职级', dataIndex:'rankLevel', width:60 },
+            { title:'榜单', dataIndex:'rankingList', width:80 },
+            { title:'积分', dataIndex:'totalPoints', width:70, render:(v,r)=>r.status===2?<span style={{color:'#bfbfbf',textDecoration:'line-through'}}>{v}</span>:v },
+            { title:'排名', dataIndex:'ranking', width:70, render:(v,r)=>r.status===2?<Tooltip title="已禁用，不参与排名"><Tag color="default">--</Tag></Tooltip>:v },
+            { title:'状态', dataIndex:'status', width:100, render:v=>{
+              const m = {1:{c:'green',t:'在职',i:'CheckCircleOutlined'},2:{c:'red',t:'禁用(不排名)',i:'StopOutlined'},4:{c:'orange',t:'待岗',i:'ClockCircleOutlined'},5:{c:'gold',t:'停薪留职',i:'PauseCircleOutlined'}};
+              const s = m[v]||m[1];
+              return <Tag color={s.c} icon={I(s.i,{fontSize:11})}>{s.t}</Tag>;
+            }},
+            { title:'操作', width:200, fixed:'right', render:(_,r)=>(
+              <Space size={4} wrap>
+                <a onClick={()=>setModalOpen(true)}>{I('EditOutlined')} 编辑</a>
+                {r.status===1 && <>
+                  <Popconfirm title={<span>确认将 <strong>{r.name}</strong> 标记为离职？<br/>离职后将移入历史员工列表</span>} onConfirm={()=>leaveUser(r.id)}>
+                    <a style={{color:'#ff4d4f'}}>{I('UserDeleteOutlined')} 离职</a>
+                  </Popconfirm>
+                  <Popconfirm title={<div><strong>禁用 {r.name}？</strong><br/><span style={{color:'#fa8c16'}}>禁用后该员工将不参与积分排名，<br/>但积分数据保留，启用后恢复排名。</span></div>}
+                    onConfirm={()=>changeStatus(r.id, 2, '禁用')} okText="确认禁用" okButtonProps={{danger:true}}>
+                    <a style={{color:'#fa8c16'}}>{I('StopOutlined')} 禁用</a>
+                  </Popconfirm>
+                </>}
+                {r.status===2 && <Popconfirm title={<div><strong>启用 {r.name}？</strong><br/><span style={{color:'#52c41a'}}>启用后恢复参与积分排名。</span></div>}
+                  onConfirm={()=>changeStatus(r.id, 1, '启用')} okText="确认启用">
+                  <a style={{color:'#52c41a',fontWeight:600}}>{I('CheckCircleOutlined')} 启用</a>
+                </Popconfirm>}
+                {r.status===4 && <Popconfirm title={`将 ${r.name} 从待岗恢复为在职？`} onConfirm={()=>changeStatus(r.id, 1, '启用(恢复在职)')}>
+                  <a style={{color:'#52c41a'}}>{I('CheckCircleOutlined')} 启用</a>
+                </Popconfirm>}
+                {r.status===5 && <Popconfirm title={`将 ${r.name} 从停薪留职恢复为在职？`} onConfirm={()=>changeStatus(r.id, 1, '启用(恢复在职)')}>
+                  <a style={{color:'#52c41a'}}>{I('CheckCircleOutlined')} 启用</a>
+                </Popconfirm>}
+              </Space>
+            )},
+          ]}
+        />
+      </div>
+      <Modal open={modalOpen} title={<span>{I('UserAddOutlined',{marginRight:6})}员工信息</span>} width={720} onCancel={()=>setModalOpen(false)} onOk={()=>{message.success('保存成功');setModalOpen(false)}}>
+        <Form layout="vertical" style={{marginTop:16}}>
+          <Row gutter={16}>
+            <Col span={12}><Form.Item label="工号" required><Input placeholder="如 000009" /></Form.Item></Col>
+            <Col span={12}><Form.Item label="姓名" required><Input /></Form.Item></Col>
+            <Col span={12}><Form.Item label="归属组织" required><Select placeholder="选择"><Option value="TD">TD</Option><Option value="XD">XD</Option><Option value="TY">TY</Option><Option value="WB">WB</Option></Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="部门" required><TreeSelect treeData={MOCK_DEPTS} fieldNames={{label:'name',value:'id',children:'children'}} placeholder="选择部门" treeDefaultExpandAll /></Form.Item></Col>
+            <Col span={12}><Form.Item label="员工状态"><Select defaultValue={1}>
+              <Option value={1}>在职（参与排名）</Option><Option value={2}>禁用（不参与排名）</Option><Option value={4}>待岗</Option><Option value={5}>停薪留职</Option>
+            </Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="性别"><Radio.Group><Radio value={1}>男</Radio><Radio value={2}>女</Radio></Radio.Group></Form.Item></Col>
+            <Col span={12}><Form.Item label="入职日期"><DatePicker style={{width:'100%'}} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="邮箱"><Input /></Form.Item></Col>
+            <Col span={12}><Form.Item label="学历"><Select allowClear><Option value="博士">博士</Option><Option value="硕士">硕士</Option><Option value="本科">本科</Option><Option value="大专">大专</Option></Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="岗位"><Input /></Form.Item></Col>
+            <Col span={12}><Form.Item label="职级"><Select allowClear>{['P3','P4','P5','P6','P7','P8','P9','P10','P11','P12','M1','M2','M3','M4','M5','M6'].map(r=><Option key={r} value={r}>{r}</Option>)}</Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="base地"><Input /></Form.Item></Col>
+            <Col span={12}><Form.Item label="所属榜单"><Select placeholder="选择榜单" allowClear>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id} value={rl.id}>{rl.name}</Option>)}</Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="项目角色"><Input /></Form.Item></Col>
+          </Row>
+        </Form>
+      </Modal>
+      <FieldManageDrawer open={fieldOpen} onClose={()=>setFieldOpen(false)} fields={userFields} title="员工列表 - 字段管理" />
+    </div>
+  );
+}
+
+function HistoryUserListPage() {
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('HistoryOutlined',{marginRight:8})}历史员工</h2></div>
+      <div className="card-box">
+        <div className="filter-bar">
+          <Search placeholder="搜索工号/姓名" style={{width:220}} prefix={I('SearchOutlined')} />
+          <Button icon={I('ExportOutlined')}>导出</Button>
+        </div>
+        <Table dataSource={MOCK_HISTORY} rowKey="id" size="middle" columns={[
+          { title:'工号', dataIndex:'employeeNo', width:100 },
+          { title:'姓名', dataIndex:'name', width:80 },
+          { title:'归属', dataIndex:'companyBelong', width:60, render:v=><Tag color={COMPANY_COLORS[v]}>{v}</Tag> },
+          { title:'部门', dataIndex:'department', width:150 },
+          { title:'岗位', dataIndex:'position', width:150 },
+          { title:'职级', dataIndex:'rankLevel', width:60 },
+          { title:'最终积分', dataIndex:'totalPoints', width:80 },
+          { title:'状态', width:70, render:()=><Tag color="default">离职</Tag> },
+        ]} />
+      </div>
+    </div>
+  );
+}
+
+/* ==================== DEPARTMENT MANAGEMENT (Enhanced v2.1) ==================== */
+function DepartmentManagePage() {
+  const [selectedKey, setSelectedKey] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit' | 'addChild'
+  const [modalForm, setModalForm] = useState({ name:'', parentId:null, level:2, sortOrder:0, managerId:null });
+  const [managerModalOpen, setManagerModalOpen] = useState(false);
+  const [deptFieldOpen, setDeptFieldOpen] = useState(false);
+
+  const levelMap = {1:'集团',2:'事业部',3:'交付组'};
+  const levelColors = {1:'#722ed1',2:'#1890ff',3:'#52c41a'};
+
+  // Mock dept managers
+  const [deptManagers, setDeptManagers] = useState({ 2:'000001', 5:'000003', 6:'000007' }); // deptId -> employeeNo
+
+  const flatMap = {};
+  const walk = (nodes) => nodes.forEach(n => { flatMap[n.id]=n; if(n.children) walk(n.children); });
+  walk(MOCK_DEPTS);
+  const selected = selectedKey ? flatMap[selectedKey] : null;
+
+  const toTreeData = (nodes) => nodes.map(n => ({
+    key: n.id, title: n.name, level: n.level, memberCount: n.memberCount || 0,
+    children: n.children?.length ? toTreeData(n.children) : undefined,
+  }));
+  const treeData = toTreeData(MOCK_DEPTS);
+
+  // Get employees for selected department
+  const getDeptUsers = (deptName) => {
+    if (!deptName) return [];
+    return MOCK_USERS.filter(u => u.department === deptName || (deptName === '同盾集团'));
+  };
+  const deptUsers = selected ? getDeptUsers(selected.name) : [];
+  const managerNo = selected ? deptManagers[selected.id] : null;
+  const managerUser = managerNo ? MOCK_USERS.find(u => u.employeeNo === managerNo) : null;
+
+  // Modal handlers
+  const openAddModal = () => {
+    setModalMode('add');
+    setModalForm({ name:'', parentId:null, level:2, sortOrder:0, managerId:null });
+    setModalOpen(true);
+  };
+  const openEditModal = () => {
+    if (!selected) return;
+    setModalMode('edit');
+    setModalForm({ name:selected.name, parentId:null, level:selected.level, sortOrder:selected.id, managerId:deptManagers[selected.id]||null });
+    setModalOpen(true);
+  };
+  const openAddChildModal = () => {
+    if (!selected) return;
+    setModalMode('addChild');
+    setModalForm({ name:'', parentId:selected.id, level:Math.min(selected.level+1,3), sortOrder:0, managerId:null });
+    setModalOpen(true);
+  };
+  const handleModalSave = () => {
+    if (!modalForm.name.trim()) { message.error('请输入部门名称'); return; }
+    const verb = modalMode==='edit' ? '编辑' : '新增';
+    message.success(`${verb}部门「${modalForm.name}」成功`);
+    setModalOpen(false);
+  };
+  const handleSetManager = (empNo) => {
+    if (!selected) return;
+    setDeptManagers(prev => ({...prev, [selected.id]: empNo}));
+    const emp = MOCK_USERS.find(u => u.employeeNo === empNo);
+    message.success(`已设置 ${emp?.name} 为「${selected.name}」部门主管`);
+    setManagerModalOpen(false);
+  };
+
+  // Dept employee local state for status changes
+  const [deptUserOverrides, setDeptUserOverrides] = useState({});
+  const getDeptUsersWithState = () => deptUsers.map(u => ({...u, status: deptUserOverrides[u.id] !== undefined ? deptUserOverrides[u.id] : u.status}));
+  const changeDeptUserStatus = (id, newStatus, label) => {
+    setDeptUserOverrides(prev => ({...prev, [id]: newStatus}));
+    const user = MOCK_USERS.find(u=>u.id===id);
+    message.success(<span><strong>{user?.name}</strong> 已{label}{newStatus===2 ? ' — 不再参与积分排名' : newStatus===1 ? ' — 已恢复参与积分排名' : ''}</span>);
+  };
+
+  const deptEmployeeFields = [
+    { key:'employeeNo', label:'工号', visible:true, required:true },
+    { key:'name', label:'姓名', visible:true, required:true },
+    { key:'companyBelong', label:'归属组织', visible:true },
+    { key:'position', label:'岗位', visible:true },
+    { key:'rankLevel', label:'职级', visible:true },
+    { key:'rankingList', label:'所属榜单', visible:true },
+    { key:'totalPoints', label:'积分', visible:true },
+    { key:'ranking', label:'排名', visible:true },
+    { key:'status', label:'状态', visible:true },
+    { key:'hireDate', label:'入职日期', visible:false },
+    { key:'email', label:'邮箱', visible:false },
+  ];
+
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('ApartmentOutlined',{marginRight:8})}部门管理</h2></div>
+      <Row gutter={16}>
+        {/* Left: Tree */}
+        <Col span={7}>
+          <div className="card-box" style={{minHeight:600}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+              <Text strong>{I('ClusterOutlined',{marginRight:6})}组织架构</Text>
+              <Button type="primary" size="small" icon={I('PlusOutlined')} onClick={openAddModal}>新增部门</Button>
+            </div>
+            <Tree
+              showLine={{showLeafIcon:false}}
+              blockNode
+              defaultExpandAll
+              selectedKeys={selectedKey?[selectedKey]:[]}
+              onSelect={(keys)=>setSelectedKey(keys[0]||null)}
+              treeData={treeData}
+              titleRender={(node)=>(
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 8px',borderRadius:6,
+                  background:selectedKey===node.key?'#e6f7ff':'transparent',
+                  borderLeft:selectedKey===node.key?'3px solid #1890ff':'3px solid transparent'}}>
+                  <Space size={6}>
+                    {I(node.level===1?'BankOutlined':node.level===2?'TeamOutlined':'UserOutlined',{color:levelColors[node.level]})}
+                    <span style={{fontWeight:selectedKey===node.key?600:400}}>{node.title}</span>
+                    <Tag color={levelColors[node.level]} style={{fontSize:10,lineHeight:'16px',padding:'0 4px'}}>{levelMap[node.level]}</Tag>
+                  </Space>
+                  <Badge count={node.memberCount} style={{background:levelColors[node.level]}} overflowCount={999} size="small" />
+                </div>
+              )}
+            />
+          </div>
+        </Col>
+
+        {/* Right: Dept Info + Employee List */}
+        <Col span={17}>
+          {selected ? (<>
+            {/* Dept Info Card */}
+            <div className="card-box">
+              <Descriptions title={<span>{I('InfoCircleOutlined',{marginRight:6})}{selected.name} — 部门详情</span>} bordered column={3} size="small">
+                <Descriptions.Item label="部门名称">{selected.name}</Descriptions.Item>
+                <Descriptions.Item label="层级"><Tag color={levelColors[selected.level]}>{levelMap[selected.level]}</Tag></Descriptions.Item>
+                <Descriptions.Item label="人数"><Badge count={selected.memberCount||0} style={{background:'#1890ff'}} showZero /></Descriptions.Item>
+                <Descriptions.Item label="排序">{selected.id}</Descriptions.Item>
+                <Descriptions.Item label="部门主管" span={2}>
+                  {managerUser ? (
+                    <Space>
+                      <Avatar size="small" style={{background:'#1890ff'}}>{managerUser.name[0]}</Avatar>
+                      <span style={{fontWeight:600}}>{managerUser.name}</span>
+                      <Tag color={COMPANY_COLORS[managerUser.companyBelong]}>{managerUser.companyBelong}</Tag>
+                      <span style={{color:'#8c8c8c',fontSize:12}}>{managerUser.position}</span>
+                    </Space>
+                  ) : <span style={{color:'#bfbfbf'}}>未设置</span>}
+                </Descriptions.Item>
+              </Descriptions>
+              <Space style={{marginTop:16}} wrap>
+                <Button type="primary" icon={I('EditOutlined')} onClick={openEditModal}>编辑部门</Button>
+                <Popconfirm title={<div>确认删除「{selected.name}」？<br/><span style={{color:'#ff4d4f'}}>该部门下有 {selected.memberCount||0} 名员工</span></div>}
+                  onConfirm={()=>message.success(`已删除部门「${selected.name}」`)}>
+                  <Button danger icon={I('DeleteOutlined')} disabled={(selected.children?.length||0)>0}>删除部门</Button>
+                </Popconfirm>
+                {selected.level < 3 && <Button icon={I('PlusOutlined')} onClick={openAddChildModal}>添加子部门</Button>}
+                <Button icon={I('UserSwitchOutlined')} onClick={()=>setManagerModalOpen(true)}>设置主管</Button>
+              </Space>
+            </div>
+
+            {/* Dept Employee List */}
+            <div className="card-box">
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                <Text strong>{I('TeamOutlined',{marginRight:6})}{selected.name} — 部门员工 ({deptUsers.length}人)</Text>
+                <Space>
+                  <Search placeholder="搜索工号/姓名" style={{width:180}} size="small" prefix={I('SearchOutlined')} />
+                  <Select placeholder="归属组织" size="small" style={{width:100}} allowClear>
+                    <Option value="TD">TD</Option><Option value="XD">XD</Option><Option value="TY">TY</Option><Option value="WB">WB</Option>
+                  </Select>
+                  <Select placeholder="状态" size="small" style={{width:90}} allowClear>
+                    <Option value={1}>在职</Option><Option value={2}>禁用</Option><Option value={4}>待岗</Option><Option value={5}>停薪留职</Option>
+                  </Select>
+                  <Tooltip title="字段管理"><Button size="small" icon={I('SettingOutlined')} onClick={()=>setDeptFieldOpen(true)} /></Tooltip>
+                </Space>
+              </div>
+              <Table dataSource={getDeptUsersWithState()} rowKey="id" size="small"
+                pagination={{pageSize:10,showTotal:t=>`共 ${t} 人`,size:'small'}}
+                columns={[
+                  { title:'工号', dataIndex:'employeeNo', width:80 },
+                  { title:'姓名', dataIndex:'name', width:60, render:(v,r)=>(
+                    <Space size={4}>
+                      {r.employeeNo===managerNo && <Tooltip title="部门主管">{I('CrownOutlined',{color:'#faad14',fontSize:13})}</Tooltip>}
+                      <span>{v}</span>
+                    </Space>
+                  )},
+                  { title:'归属组织', dataIndex:'companyBelong', width:80, render:v=><Tag color={COMPANY_COLORS[v]}>{v}</Tag>,
+                    filters:[{text:'TD',value:'TD'},{text:'XD',value:'XD'},{text:'TY',value:'TY'},{text:'WB',value:'WB'}],
+                    onFilter:(val,r)=>r.companyBelong===val },
+                  { title:'岗位', dataIndex:'position', width:140, ellipsis:true },
+                  { title:'职级', dataIndex:'rankLevel', width:50 },
+                  { title:'榜单', dataIndex:'rankingList', width:70 },
+                  { title:'积分', dataIndex:'totalPoints', width:60, render:(v,r)=>r.status===2?<span style={{color:'#bfbfbf',textDecoration:'line-through'}}>{v}</span>:v },
+                  { title:'排名', dataIndex:'ranking', width:50, render:(v,r)=>r.status===2?<Tag color="default">--</Tag>:v },
+                  { title:'状态', dataIndex:'status', width:90, render:v=>{
+                    const m = {1:{c:'green',t:'在职'},2:{c:'red',t:'禁用'},4:{c:'orange',t:'待岗'},5:{c:'gold',t:'停薪留职'}};
+                    const s = m[v]||m[1]; return <Tag color={s.c}>{s.t}</Tag>;
+                  }},
+                  { title:'操作', width:120, render:(_,r)=>(
+                    <Space size={4}>
+                      <a>{I('EditOutlined')} 编辑</a>
+                      {r.status===1 && <Popconfirm title={<div><strong>禁用 {r.name}？</strong><br/><span style={{color:'#fa8c16'}}>禁用后不参与积分排名</span></div>}
+                        onConfirm={()=>changeDeptUserStatus(r.id, 2, '禁用')} okText="确认禁用" okButtonProps={{danger:true}}>
+                        <a style={{color:'#fa8c16'}}>{I('StopOutlined')} 禁用</a>
+                      </Popconfirm>}
+                      {r.status===2 && <Popconfirm title={<div><strong>启用 {r.name}？</strong><br/><span style={{color:'#52c41a'}}>恢复参与积分排名</span></div>}
+                        onConfirm={()=>changeDeptUserStatus(r.id, 1, '启用')} okText="确认启用">
+                        <a style={{color:'#52c41a',fontWeight:600}}>{I('CheckCircleOutlined')} 启用</a>
+                      </Popconfirm>}
+                      {(r.status===4||r.status===5) && <Popconfirm title={`将 ${r.name} 恢复为在职？`}
+                        onConfirm={()=>changeDeptUserStatus(r.id, 1, '启用')}>
+                        <a style={{color:'#52c41a'}}>{I('CheckCircleOutlined')} 启用</a>
+                      </Popconfirm>}
+                    </Space>
+                  )},
+                ]}
+              />
+            </div>
+          </>) : (
+            <div className="card-box" style={{minHeight:600,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+              {I('ApartmentOutlined',{fontSize:56,color:'#d9d9d9'})}
+              <p style={{marginTop:16,color:'#bfbfbf',fontSize:15}}>请在左侧选择部门查看详情和员工列表</p>
+            </div>
+          )}
+        </Col>
+      </Row>
+
+      {/* Add/Edit Department Modal */}
+      <Modal open={modalOpen} width={500}
+        title={<span>{I('ApartmentOutlined',{marginRight:6})}
+          {modalMode==='edit' ? `编辑部门 — ${selected?.name||''}` : modalMode==='addChild' ? `新增子部门 — 上级: ${selected?.name||''}` : '新增部门'}
+        </span>}
+        onCancel={()=>setModalOpen(false)}
+        onOk={handleModalSave}
+        okText={modalMode==='edit'?'保存修改':'创建'}>
+        <Form layout="vertical" style={{marginTop:16}}>
+          <Form.Item label="部门名称" required>
+            <Input value={modalForm.name} onChange={e=>setModalForm(f=>({...f,name:e.target.value}))} placeholder="请输入部门名称" />
+          </Form.Item>
+          <Form.Item label="上级部门">
+            <TreeSelect treeData={treeData} value={modalForm.parentId} onChange={v=>setModalForm(f=>({...f,parentId:v}))}
+              placeholder="留空为顶级部门" allowClear treeDefaultExpandAll
+              disabled={modalMode==='addChild'} />
+          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="层级">
+                <Select value={modalForm.level} onChange={v=>setModalForm(f=>({...f,level:v}))}>
+                  <Option value={1}>集团</Option><Option value={2}>事业部</Option><Option value={3}>交付组</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="排序">
+                <InputNumber min={0} value={modalForm.sortOrder} onChange={v=>setModalForm(f=>({...f,sortOrder:v||0}))} style={{width:'100%'}} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item label="部门主管（可选）">
+            <Select value={modalForm.managerId} onChange={v=>setModalForm(f=>({...f,managerId:v}))}
+              placeholder="选择该部门主管" allowClear showSearch
+              filterOption={(input,opt)=>opt.children.toLowerCase().includes(input.toLowerCase())}>
+              {MOCK_USERS.map(u=><Option key={u.employeeNo} value={u.employeeNo}>{u.employeeNo} - {u.name} ({u.companyBelong})</Option>)}
+            </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Set Manager Modal */}
+      <Modal open={managerModalOpen} title={<span>{I('UserSwitchOutlined',{marginRight:6})}设置「{selected?.name}」部门主管</span>}
+        onCancel={()=>setManagerModalOpen(false)} footer={null} width={480}>
+        <div style={{marginBottom:12}}>
+          <Text type="secondary">当前主管：{managerUser ? <Tag color="blue">{managerUser.name} ({managerUser.employeeNo})</Tag> : '未设置'}</Text>
+        </div>
+        <Alert message="从该部门员工中选择一位作为主管，一个部门仅限一位主管" type="info" showIcon style={{marginBottom:16}} />
+        <List dataSource={deptUsers.filter(u=>u.status===1)} rowKey="id" size="small"
+          renderItem={u=>(
+            <List.Item
+              actions={[
+                u.employeeNo===managerNo
+                  ? <Tag color="blue">当前主管</Tag>
+                  : <Button type="link" size="small" onClick={()=>handleSetManager(u.employeeNo)}>设为主管</Button>
+              ]}>
+              <List.Item.Meta
+                avatar={<Avatar size="small" style={{background:u.employeeNo===managerNo?'#faad14':'#1890ff'}}>{u.name[0]}</Avatar>}
+                title={<Space>{u.name}<Tag color={COMPANY_COLORS[u.companyBelong]}>{u.companyBelong}</Tag></Space>}
+                description={`${u.employeeNo} · ${u.position} · ${u.rankLevel}`}
+              />
+            </List.Item>
+          )} />
+      </Modal>
+
+      {/* Dept Employee Field Management Drawer */}
+      <FieldManageDrawer open={deptFieldOpen} onClose={()=>setDeptFieldOpen(false)} fields={deptEmployeeFields} title={`${selected?.name||'部门'} 员工列表 - 字段管理`} />
+    </div>
+  );
+}
+
+/* ==================== RANKING LIST CONFIG ==================== */
+function RankingListManagePage() {
+  const [modalOpen, setModalOpen] = useState(false);
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('OrderedListOutlined',{marginRight:8})}榜单配置</h2></div>
+      <div className="card-box">
+        <div className="table-actions"><Button type="primary" icon={I('PlusOutlined')} onClick={()=>setModalOpen(true)}>新增榜单</Button></div>
+        <Table dataSource={MOCK_RANKING_LISTS} rowKey="id" size="middle" columns={[
+          { title:'榜单名称', dataIndex:'name', width:150 },
+          { title:'说明', dataIndex:'description', ellipsis:true },
+          { title:'前N名', dataIndex:'topN', width:80 },
+          { title:'启用', width:80, render:(_,r)=><Switch checked={r.isActive===1} /> },
+          { title:'操作', width:120, render:()=><Space><a onClick={()=>setModalOpen(true)}>{I('EditOutlined')} 编辑</a><Popconfirm title="确认删除？"><a style={{color:'#ff4d4f'}}>{I('DeleteOutlined')} 删除</a></Popconfirm></Space> },
+        ]} />
+      </div>
+      <Modal open={modalOpen} title={<span>{I('TrophyOutlined',{marginRight:6})}榜单信息</span>} onCancel={()=>setModalOpen(false)} onOk={()=>{message.success('保存成功');setModalOpen(false)}}>
+        <Form layout="vertical" style={{marginTop:16}}>
+          <Form.Item label="榜单名称" required><Input /></Form.Item>
+          <Form.Item label="说明"><TextArea rows={2} /></Form.Item>
+          <Form.Item label="排名前N名"><InputNumber min={1} max={100} defaultValue={10} /></Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+
+/* ==================== CATEGORY MANAGE ==================== */
+function CategoryManagePage() {
+  const [modalOpen, setModalOpen] = useState(false);
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('AppstoreOutlined',{marginRight:8})}分类管理（管控项）</h2></div>
+      <div className="card-box">
+        <div className="table-actions"><Button type="primary" icon={I('PlusOutlined')} onClick={()=>setModalOpen(true)}>新增分类</Button></div>
+        <Table dataSource={MOCK_CATEGORIES} rowKey="id" size="middle" columns={[
+          { title:'名称', dataIndex:'name', width:200 },
+          { title:'说明', dataIndex:'description', ellipsis:true },
+          { title:'排序', dataIndex:'sortOrder', width:60 },
+          { title:'状态', width:80, render:(_,r)=><Tag color={r.isActive===1?'green':'default'}>{r.isActive===1?'启用':'停用'}</Tag> },
+          { title:'操作', width:120, render:(_,r)=>(
+            <Space><a onClick={()=>setModalOpen(true)}>{I('EditOutlined')} 编辑</a>
+            {r.isActive===1 && <Popconfirm title="确认停用？"><a style={{color:'#ff4d4f'}}>{I('StopOutlined')} 停用</a></Popconfirm>}
+            </Space>
+          )},
+        ]} />
+      </div>
+      <Modal open={modalOpen} title={<span>{I('AppstoreAddOutlined',{marginRight:6})}分类信息</span>} onCancel={()=>setModalOpen(false)} onOk={()=>{message.success('保存成功');setModalOpen(false)}}>
+        <Form layout="vertical" style={{marginTop:16}}>
+          <Form.Item label="名称" required><Input /></Form.Item>
+          <Form.Item label="说明"><TextArea rows={2} /></Form.Item>
+          <Form.Item label="排序"><InputNumber min={0} defaultValue={0} /></Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+
+/* ==================== INDICATOR LIST (with Classification Filter + Field Management) ==================== */
+function IndicatorListPage() {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [scoreType, setScoreType] = useState(1);
+  const [fieldOpen, setFieldOpen] = useState(false);
+  const indicatorFields = [
+    { key:'category', label:'管控项', visible:true, required:true },
+    { key:'name', label:'评价维度', visible:true, required:true },
+    { key:'direction', label:'方向', visible:true },
+    { key:'score', label:'分值', visible:true },
+    { key:'pointStatus', label:'积分状态', visible:true },
+    { key:'classification', label:'积分归类', visible:true },
+    { key:'scoreType', label:'分值类型', visible:false },
+    { key:'remark', label:'备注', visible:false },
+  ];
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('UnorderedListOutlined',{marginRight:8})}指标列表</h2></div>
+      <div className="card-box">
+        <div className="filter-bar">
+          <Select placeholder="管控项" style={{width:140}} allowClear>{MOCK_CATEGORIES.map(c=><Option key={c.id} value={c.name}>{c.name}</Option>)}</Select>
+          <Select placeholder="方向" style={{width:100}} allowClear><Option value={1}>加分</Option><Option value={-1}>扣分</Option></Select>
+          <Select placeholder="积分状态" style={{width:120}} allowClear><Option value={1}>过程分</Option><Option value={2}>结果分</Option></Select>
+          <Select placeholder="积分归类" style={{width:150}} allowClear>
+            {CLASSIFICATIONS.map(c=><Option key={c} value={c}>{c}</Option>)}
+          </Select>
+        </div>
+        <div className="table-actions">
+          <Space>
+            <Button type="primary" icon={I('PlusOutlined')} onClick={()=>setModalOpen(true)}>新增指标</Button>
+            <Button icon={I('ExportOutlined')}>导出</Button>
+            <Button icon={I('DownloadOutlined')}>模板下载</Button>
+            <Button icon={I('UploadOutlined')}>批量导入</Button>
+            <Tooltip title="字段管理"><Button icon={I('SettingOutlined')} onClick={()=>setFieldOpen(true)} /></Tooltip>
+          </Space>
+        </div>
+        <Table dataSource={MOCK_INDICATORS} rowKey="id" size="middle" columns={[
+          { title:'管控项', dataIndex:'category', width:100 },
+          { title:'评价维度', dataIndex:'name', width:180 },
+          { title:'方向', width:70, render:(_,r)=><Tag color={r.direction===1?'green':'red'}>{r.direction===1?'加分':'扣分'}</Tag> },
+          { title:'分值', width:100, render:(_,r)=>r.scoreType===1?`${r.fixedScore} 分`:`${r.minScore} ~ ${r.maxScore} 分` },
+          { title:'积分状态', width:80, render:(_,r)=><Tag color={r.pointStatus===1?'purple':'blue'}>{r.pointStatus===1?'过程分':'结果分'}</Tag> },
+          { title:'积分归类', dataIndex:'classification', width:120 },
+          { title:'操作', width:100, render:()=><Space><a onClick={()=>setModalOpen(true)}>{I('EditOutlined')} 编辑</a><Popconfirm title="确认停用？"><a style={{color:'#ff4d4f'}}>{I('StopOutlined')} 停用</a></Popconfirm></Space> },
+        ]} />
+      </div>
+      <Modal open={modalOpen} title={<span>{I('AimOutlined',{marginRight:6})}指标信息</span>} width={640} onCancel={()=>setModalOpen(false)} onOk={()=>{message.success('保存成功');setModalOpen(false)}}>
+        <Form layout="vertical" style={{marginTop:16}}>
+          <Row gutter={16}>
+            <Col span={12}><Form.Item label="管控项" required><Select>{MOCK_CATEGORIES.map(c=><Option key={c.id}>{c.name}</Option>)}</Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="评价维度" required><Input /></Form.Item></Col>
+            <Col span={12}><Form.Item label="方向" required><Radio.Group><Radio value={1}>加分</Radio><Radio value={-1}>扣分</Radio></Radio.Group></Form.Item></Col>
+            <Col span={12}><Form.Item label="分值类型" required><Radio.Group value={scoreType} onChange={e=>setScoreType(e.target.value)}><Radio value={1}>固定</Radio><Radio value={2}>范围</Radio></Radio.Group></Form.Item></Col>
+            {scoreType===1 ? <Col span={12}><Form.Item label="固定分值"><InputNumber style={{width:'100%'}} /></Form.Item></Col>
+            : <><Col span={12}><Form.Item label="最小分值"><InputNumber style={{width:'100%'}} /></Form.Item></Col><Col span={12}><Form.Item label="最大分值"><InputNumber style={{width:'100%'}} /></Form.Item></Col></>}
+            <Col span={12}><Form.Item label="积分状态" required><Radio.Group><Radio value={1}>过程分</Radio><Radio value={2}>结果分</Radio></Radio.Group></Form.Item></Col>
+            <Col span={12}><Form.Item label="积分归类"><Select>{CLASSIFICATIONS.map(c=><Option key={c} value={c}>{c}</Option>)}</Select></Form.Item></Col>
+          </Row>
+        </Form>
+      </Modal>
+      <FieldManageDrawer open={fieldOpen} onClose={()=>setFieldOpen(false)} fields={indicatorFields} title="指标列表 - 字段管理" />
+    </div>
+  );
+}
+
+/* ==================== QUICK ENTRY ==================== */
+function QuickEntryPage() {
+  const [pending, setPending] = useState([
+    { _id:1, employeeNo:'000001', employeeName:'张明', indicatorName:'按时交付项目', categoryName:'项目交付', confirmedScore:10, score:10, description:'Q1项目按期交付' },
+    { _id:2, employeeNo:'000005', employeeName:'刘洋', indicatorName:'代码质量优秀', categoryName:'技术能力', confirmedScore:12, score:12, description:'' },
+  ]);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const total = pending.reduce((s,r)=>s+r.score,0);
+  const unique = new Set(pending.map(r=>r.employeeNo)).size;
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('EditOutlined',{marginRight:8})}积分录入</h2></div>
+      <div className="card-box">
+        <Tabs items={[
+          { key:'quick', label:<span>{I('ThunderboltOutlined')} 快速录入</span>, children: (<>
+            <div style={{background:'#f6f8fa',borderRadius:8,padding:'16px 20px',marginBottom:16,border:'1px solid #e8e8e8',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <Form.Item label="所属月份" required style={{marginBottom:0}}>
+                <DatePicker picker="month" defaultValue={dayjs()} style={{width:160}} />
+              </Form.Item>
+              <span style={{color:'#8c8c8c',fontSize:13}}>已添加 <span style={{color:'#1890ff',fontWeight:700,fontSize:16}}>{pending.length}</span> 条，涉及 <span style={{fontWeight:600}}>{unique}</span> 人</span>
+            </div>
+            <Form layout="vertical">
+              <Row gutter={16}>
+                <Col span={8}><Form.Item label="员工"><Select showSearch placeholder="搜索工号/姓名" filterOption={(i,o)=>o.children.toLowerCase().includes(i.toLowerCase())}>{MOCK_USERS.map(u=><Option key={u.id}>{u.employeeNo} - {u.name} ({u.companyBelong})</Option>)}</Select></Form.Item></Col>
+                <Col span={8}><Form.Item label="指标分类"><Select placeholder="全部分类" allowClear>{MOCK_CATEGORIES.map(c=><Option key={c.id}>{c.name}</Option>)}</Select></Form.Item></Col>
+                <Col span={8}><Form.Item label="评价指标"><Select placeholder="选择指标">{MOCK_INDICATORS.map(i=><Option key={i.id}>{i.name} ({i.direction===1?'加分':'扣分'})</Option>)}</Select></Form.Item></Col>
+                <Col span={6}><Form.Item label="指标分值"><InputNumber disabled style={{width:'100%'}} placeholder="请先选指标" /></Form.Item></Col>
+                <Col span={6}><Form.Item label="确认分值"><InputNumber style={{width:'100%'}} /></Form.Item></Col>
+                <Col span={8}><Form.Item label="事由说明"><Input placeholder="选填" /></Form.Item></Col>
+                <Col span={4}><Form.Item label=" "><Button type="primary" block icon={I('PlusOutlined')} onClick={()=>message.info('演示模式')}>添加</Button></Form.Item></Col>
+              </Row>
+            </Form>
+            {pending.length > 0 && (
+              <div style={{marginTop:8}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                  <strong>{I('UnorderedListOutlined',{marginRight:4})}待提交列表</strong>
+                  <Space>
+                    <span style={{color:'#8c8c8c'}}>合计: <span style={{color:total>=0?'#52c41a':'#ff4d4f',fontWeight:700}}>{total>0?'+':''}{total} 分</span></span>
+                    <Button danger size="small" icon={I('DeleteOutlined')} onClick={()=>setPending([])}>清空</Button>
+                  </Space>
+                </div>
+                <Table dataSource={pending} rowKey="_id" size="small" pagination={false} columns={[
+                  { title:'#', width:40, render:(_,__,i)=>i+1 },
+                  { title:'工号', dataIndex:'employeeNo', width:80 },
+                  { title:'姓名', dataIndex:'employeeName', width:70 },
+                  { title:'指标', dataIndex:'indicatorName' },
+                  { title:'分类', dataIndex:'categoryName', width:90 },
+                  { title:'确认分值', dataIndex:'confirmedScore', width:90 },
+                  { title:'实际得分', dataIndex:'score', width:90, render:v=><Tag color={v>0?'green':'red'}>{v>0?'+':''}{v}</Tag> },
+                  { title:'事由', dataIndex:'description', width:140, ellipsis:true },
+                  { title:'操作', width:60, render:(_,r)=><a style={{color:'#ff4d4f'}} onClick={()=>setPending(pending.filter(p=>p._id!==r._id))}>{I('DeleteOutlined')}</a> },
+                ]} />
+                <div style={{textAlign:'right',marginTop:16}}>
+                  <Button type="primary" size="large" icon={I('SendOutlined')} onClick={()=>setPreviewOpen(true)}>预览并提交 ({pending.length})</Button>
+                </div>
+              </div>
+            )}
+          </>)},
+          { key:'batch', label:<span>{I('UploadOutlined')} 批量导入</span>, children: (
+            <div>
+              <Alert message="通过Excel批量导入积分记录，请先下载模板填写后上传" type="info" showIcon style={{marginBottom:16}} />
+              <Row gutter={16}><Col span={8}><Form.Item label="归属月份" required><DatePicker picker="month" style={{width:'100%'}} /></Form.Item></Col></Row>
+              <Space><Button icon={I('DownloadOutlined')}>模板下载</Button><Button type="primary" icon={I('UploadOutlined')}>上传导入</Button></Space>
+            </div>
+          )},
+        ]} />
+      </div>
+      <div className="card-box" style={{marginTop:16}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <strong>{I('HistoryOutlined',{marginRight:4})}最近录入记录</strong>
+          <Select placeholder="审核状态" style={{width:120}} allowClear defaultValue={0}>
+            <Option value={0}>待审核</Option><Option value={1}>已通过</Option><Option value={2}>已驳回</Option>
+          </Select>
+        </div>
+        <Table dataSource={MOCK_POINTS} rowKey="id" size="small" pagination={{pageSize:10}} columns={[
+          { title:'员工', dataIndex:'user', width:70 },
+          { title:'指标', dataIndex:'indicator', width:140 },
+          { title:'分值', dataIndex:'score', width:70, render:v=><Tag color={v>0?'green':'red'}>{v>0?'+':''}{v}</Tag> },
+          { title:'类型', dataIndex:'pointStatus', width:70, render:v=>v===1?'过程分':'结果分' },
+          { title:'月份', dataIndex:'belongMonth', width:80 },
+          { title:'审核', dataIndex:'auditStatus', width:80, render:v=><Tag color={AUDIT_COLORS[v]}>{AUDIT_MAP[v]}</Tag> },
+          { title:'录入时间', dataIndex:'registeredAt', width:140 },
+        ]} />
+      </div>
+      <Modal open={previewOpen} title={<span>{I('EyeOutlined',{marginRight:6})}提交预览</span>} width={900} onCancel={()=>setPreviewOpen(false)} footer={[
+        <Button key="back" onClick={()=>setPreviewOpen(false)}>返回修改</Button>,
+        <Button key="submit" type="primary" icon={I('CheckOutlined')} onClick={()=>{message.success(`提交成功，共 ${pending.length} 条`);setPreviewOpen(false);setPending([])}}>确认提交</Button>
+      ]}>
+        <div style={{marginBottom:16,background:'#f6ffed',border:'1px solid #b7eb8f',borderRadius:6,padding:'12px 16px'}}>
+          <Row gutter={24}>
+            <Col span={6}><span style={{color:'#8c8c8c'}}>所属月份:</span> <strong>2026-03</strong></Col>
+            <Col span={6}><span style={{color:'#8c8c8c'}}>录入条数:</span> <strong style={{color:'#1890ff'}}>{pending.length}</strong></Col>
+            <Col span={6}><span style={{color:'#8c8c8c'}}>涉及员工:</span> <strong>{unique} 人</strong></Col>
+            <Col span={6}><span style={{color:'#8c8c8c'}}>分值合计:</span> <strong style={{color:total>=0?'#52c41a':'#ff4d4f'}}>{total>0?'+':''}{total}</strong></Col>
+          </Row>
+        </div>
+        <Table dataSource={pending} rowKey="_id" size="small" pagination={false} columns={[
+          { title:'#', width:40, render:(_,__,i)=>i+1 },
+          { title:'工号', dataIndex:'employeeNo', width:80 },
+          { title:'姓名', dataIndex:'employeeName', width:70 },
+          { title:'指标', dataIndex:'indicatorName' },
+          { title:'分类', dataIndex:'categoryName', width:90 },
+          { title:'确认分值', dataIndex:'confirmedScore', width:90 },
+          { title:'实际得分', dataIndex:'score', width:90, render:v=><Tag color={v>0?'green':'red'}>{v>0?'+':''}{v}</Tag> },
+          { title:'事由', dataIndex:'description', width:140, ellipsis:true },
+        ]} />
+      </Modal>
+    </div>
+  );
+}
+
+function ProcessMaintainPage() {
+  const [modalOpen, setModalOpen] = useState(false);
+  const data = [
+    { id:1, user:'张明', employeeNo:'000001', indicator:'代码质量优秀', score:12, belongMonth:'2026-03' },
+    { id:2, user:'刘洋', employeeNo:'000005', indicator:'跨部门协作贡献', score:8, belongMonth:'2026-03' },
+  ];
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('SyncOutlined',{marginRight:8})}过程分维护</h2></div>
+      <div className="card-box">
+        <Alert message="过程分每月维护，同一员工+指标+月份的记录会自动覆盖更新，历史记录自动存档" type="info" showIcon style={{marginBottom:16}} />
+        <div className="filter-bar">
+          <DatePicker picker="month" placeholder="选择月份" defaultValue={dayjs()} />
+          <Select showSearch placeholder="筛选员工" style={{width:240}} allowClear>{MOCK_USERS.map(u=><Option key={u.id}>{u.employeeNo} - {u.name}</Option>)}</Select>
+          <Button icon={I('DownloadOutlined')}>模板下载</Button><Button type="primary" icon={I('UploadOutlined')}>批量导入</Button>
+        </div>
+        <Table dataSource={data} rowKey="id" size="middle" columns={[
+          { title:'员工', dataIndex:'user', width:100 },
+          { title:'工号', dataIndex:'employeeNo', width:90 },
+          { title:'指标', dataIndex:'indicator', width:180 },
+          { title:'当前分值', dataIndex:'score', width:100, render:v=><Tag color={v>0?'green':'red'}>{v>0?'+':''}{v}</Tag> },
+          { title:'月份', dataIndex:'belongMonth', width:90 },
+          { title:'操作', width:80, render:()=><a onClick={()=>setModalOpen(true)}>{I('EditOutlined')} 更新</a> },
+        ]} />
+      </div>
+      <Modal open={modalOpen} title={<span>{I('SyncOutlined',{marginRight:6})}更新过程分</span>} onCancel={()=>setModalOpen(false)} onOk={()=>{message.success('更新成功');setModalOpen(false)}}>
+        <Form layout="vertical" style={{marginTop:16}}>
+          <Form.Item label="员工"><Input disabled defaultValue="张明" /></Form.Item>
+          <Form.Item label="指标"><Input disabled defaultValue="代码质量优秀" /></Form.Item>
+          <Form.Item label="当前分值"><Tag color="green">+12</Tag></Form.Item>
+          <Form.Item label="新分值" required><InputNumber style={{width:200}} defaultValue={12} /></Form.Item>
+          <Form.Item label="说明"><TextArea rows={2} /></Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+
+function AuditListPage() {
+  const [selectedKeys, setSelectedKeys] = useState([]);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [points, setPoints] = useState(MOCK_POINTS.map(p=>({...p})));
+  const batchApprove = () => {
+    setPoints(prev => prev.map(p => selectedKeys.includes(p.id) ? {...p, auditStatus:1} : p));
+    message.success(`已批量通过 ${selectedKeys.length} 条记录`);
+    setSelectedKeys([]);
+  };
+  const batchReject = () => {
+    setRejectOpen('batch');
+  };
+  const singleApprove = (id) => {
+    setPoints(prev => prev.map(p => p.id===id ? {...p, auditStatus:1} : p));
+    message.success('已通过');
+  };
+  const singleReject = (id) => {
+    setRejectOpen(id);
+  };
+  const confirmReject = () => {
+    if (rejectOpen === 'batch') {
+      setPoints(prev => prev.map(p => selectedKeys.includes(p.id) ? {...p, auditStatus:2} : p));
+      message.success(`已批量驳回 ${selectedKeys.length} 条记录`);
+      setSelectedKeys([]);
+    } else {
+      setPoints(prev => prev.map(p => p.id===rejectOpen ? {...p, auditStatus:2} : p));
+      message.success('已驳回');
+    }
+    setRejectOpen(false);
+  };
+  const pendingCount = points.filter(p=>p.auditStatus===0).length;
+  const passedCount = points.filter(p=>p.auditStatus===1).length;
+  const rejectedCount = points.filter(p=>p.auditStatus===2).length;
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('AuditOutlined',{marginRight:8})}积分审核</h2></div>
+      <Row gutter={12} style={{marginBottom:16}}>
+        {[
+          {label:'待审核',count:pendingCount,color:'#fa8c16'},
+          {label:'已通过',count:passedCount,color:'#52c41a'},
+          {label:'已驳回',count:rejectedCount,color:'#ff4d4f'},
+        ].map(s=>(
+          <Col span={8} key={s.label}>
+            <div style={{background:'#fff',borderRadius:6,padding:'8px 16px',textAlign:'center',borderBottom:`3px solid ${s.color}`}}>
+              <div style={{fontSize:20,fontWeight:700,color:s.color}}>{s.count}</div>
+              <div style={{fontSize:11,color:'#8c8c8c'}}>{s.label}</div>
+            </div>
+          </Col>
+        ))}
+      </Row>
+      <div className="card-box">
+        <div className="filter-bar">
+          <Select defaultValue={0} placeholder="审核状态" style={{width:130}} allowClear>
+            <Option value={0}>待审核</Option><Option value={1}>已通过</Option><Option value={2}>已驳回</Option>
+          </Select>
+          <DatePicker picker="month" placeholder="归属月份" allowClear />
+          <Select placeholder="积分状态" style={{width:120}} allowClear><Option value={1}>过程分</Option><Option value={2}>结果分</Option></Select>
+          <Search placeholder="搜索员工" style={{width:200}} prefix={I('SearchOutlined')} />
+        </div>
+        <div className="table-actions">
+          <Space>
+            <Popconfirm title={`确认批量通过 ${selectedKeys.length} 条记录？`} onConfirm={batchApprove} disabled={!selectedKeys.length}>
+              <Button type="primary" icon={I('CheckOutlined')} disabled={!selectedKeys.length}>批量通过 ({selectedKeys.length})</Button>
+            </Popconfirm>
+            <Button danger icon={I('CloseOutlined')} disabled={!selectedKeys.length} onClick={batchReject}>批量驳回 ({selectedKeys.length})</Button>
+          </Space>
+          <span style={{color:'#8c8c8c'}}>共 {points.length} 条</span>
+        </div>
+        <Table dataSource={points} rowKey="id" size="middle"
+          rowSelection={{selectedRowKeys:selectedKeys, onChange:setSelectedKeys, getCheckboxProps:r=>({disabled:r.auditStatus!==0})}}
+          columns={[
+            { title:'员工', dataIndex:'user', width:70 },
+            { title:'工号', dataIndex:'employeeNo', width:80 },
+            { title:'指标', dataIndex:'indicator', width:140 },
+            { title:'分类', dataIndex:'category', width:90 },
+            { title:'分值', dataIndex:'score', width:70, render:v=><Tag color={v>0?'green':'red'}>{v>0?'+':''}{v}</Tag> },
+            { title:'类型', dataIndex:'pointStatus', width:70, render:v=>v===1?'过程分':'结果分' },
+            { title:'月份', dataIndex:'belongMonth', width:80 },
+            { title:'录入人', dataIndex:'registrant', width:70 },
+            { title:'审核', dataIndex:'auditStatus', width:80, render:v=><Tag color={AUDIT_COLORS[v]}>{AUDIT_MAP[v]}</Tag> },
+            { title:'操作', width:140, fixed:'right', render:(_,r)=>(
+              r.auditStatus===0 ? <Space size="small">
+                <Popconfirm title="确认通过？" onConfirm={()=>singleApprove(r.id)}><a style={{color:'#52c41a'}}>{I('CheckOutlined')} 通过</a></Popconfirm>
+                <a onClick={()=>singleReject(r.id)}>{I('CloseOutlined')} 驳回</a>
+              </Space> : <span style={{color:'#8c8c8c'}}>-</span>
+            )},
+          ]}
+        />
+      </div>
+      <Modal open={!!rejectOpen} title={<span>{I('CloseCircleOutlined',{marginRight:6})}驳回理由</span>} onCancel={()=>setRejectOpen(false)} onOk={confirmReject}>
+        <TextArea rows={3} placeholder="请输入驳回理由..." style={{marginTop:16}} />
+      </Modal>
+    </div>
+  );
+}
+
+/* ==================== MONTHLY RANKING ==================== */
+function MonthlyRankingPage() {
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('RiseOutlined',{marginRight:8})}排名查看</h2></div>
+      <div className="card-box">
+        <div className="filter-bar">
+          <Form.Item label="所属月份" style={{marginBottom:0}}><DatePicker picker="month" defaultValue={dayjs()} style={{width:160}} /></Form.Item>
+          <Form.Item label="所属榜单" style={{marginBottom:0}}>
+            <Select placeholder="全部榜单" allowClear style={{width:200}}>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id}>{rl.name}</Option>)}</Select>
+          </Form.Item>
+          <Search placeholder="搜索姓名/工号" style={{width:200}} allowClear prefix={I('SearchOutlined')} />
+          <div style={{flex:1}} />
+          <Button type="primary" icon={I('ReloadOutlined')} onClick={()=>message.success('排名重新计算完成')}>重新计算排名</Button>
+        </div>
+        <Row gutter={16} style={{marginBottom:16}}>
+          {[
+            { bg:'linear-gradient(135deg,#667eea 0%,#764ba2 100%)', label:'参与排名人数', value:MOCK_RANKINGS.length, icon:'TeamOutlined' },
+            { bg:'linear-gradient(135deg,#f093fb 0%,#f5576c 100%)', label:'最高分', value:189, icon:'CrownOutlined' },
+            { bg:'linear-gradient(135deg,#4facfe 0%,#00f2fe 100%)', label:'平均分', value:150.3, icon:'CalculatorOutlined' },
+            { bg:'linear-gradient(135deg,#43e97b 0%,#38f9d7 100%)', label:'所属榜单', value:'全部', icon:'TrophyOutlined' },
+          ].map((c,i)=>(
+            <Col span={6} key={i}>
+              <div className="gradient-card" style={{background:c.bg,display:'flex',alignItems:'center',gap:12}}>
+                {I(c.icon,{fontSize:28,opacity:.85})}
+                <div>
+                  <div style={{fontSize:13,opacity:.85}}>{c.label}</div>
+                  <div style={{fontSize:28,fontWeight:700,lineHeight:1.3}}>{c.value}</div>
+                </div>
+              </div>
+            </Col>
+          ))}
+        </Row>
+        <Table dataSource={MOCK_RANKINGS} rowKey="ranking" size="small" pagination={{pageSize:20,showTotal:t=>`共 ${t} 人`}}
+          columns={[
+            { title:'排名', dataIndex:'ranking', width:70, sorter:(a,b)=>a.ranking-b.ranking, render:v=>(
+              v<=3 ? <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:28,height:28,borderRadius:'50%',color:'#fff',fontWeight:700,fontSize:14,background:RANK_COLORS[v]}}>{v}</span>
+              : <span style={{fontWeight:600,color:'#595959'}}>{v}</span>
+            )},
+            { title:'工号', dataIndex:'employeeNo', width:90 },
+            { title:'姓名', dataIndex:'name', width:70 },
+            { title:'归属', dataIndex:'companyBelong', width:60, render:v=><Tag color={COMPANY_COLORS[v]}>{v}</Tag> },
+            { title:'部门', dataIndex:'department', width:110, ellipsis:true },
+            { title:'岗位', dataIndex:'position', width:130, ellipsis:true },
+            { title:'职级', dataIndex:'rankLevel', width:60 },
+            { title:'结果分', dataIndex:'resultScore', width:70, sorter:(a,b)=>a.resultScore-b.resultScore, render:v=><span style={{color:'#1890ff'}}>{v}</span> },
+            { title:'过程分', dataIndex:'processScore', width:70, sorter:(a,b)=>a.processScore-b.processScore, render:v=><span style={{color:'#722ed1'}}>{v}</span> },
+            { title:'总分', dataIndex:'totalScore', width:80, defaultSortOrder:'descend', sorter:(a,b)=>a.totalScore-b.totalScore, render:v=><span style={{fontWeight:700,fontSize:15,color:v>=0?'#52c41a':'#ff4d4f'}}>{v>0?'+':''}{v}</span> },
+            { title:'榜单', dataIndex:'list', width:80 },
+          ]}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ==================== BLACK RANKING (NEW) ==================== */
+function BlackRankingPage() {
+  const [configMode, setConfigMode] = useState('count');
+  const [configValue, setConfigValue] = useState(10);
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('FallOutlined',{marginRight:8,color:'#ff4d4f'})}黑榜（倒数榜）</h2></div>
+      <Row gutter={16} style={{marginBottom:16}}>
+        <Col span={16}>
+          <div className="card-box" style={{marginBottom:0}}>
+            <div className="filter-bar">
+              <Form.Item label="所属月份" style={{marginBottom:0}}><DatePicker picker="month" defaultValue={dayjs()} style={{width:160}} /></Form.Item>
+              <Form.Item label="所属榜单" style={{marginBottom:0}}>
+                <Select placeholder="全部榜单" allowClear style={{width:180}}>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id}>{rl.name}</Option>)}</Select>
+              </Form.Item>
+              <Search placeholder="搜索姓名/工号" style={{width:180}} allowClear prefix={I('SearchOutlined')} />
+            </div>
+          </div>
+        </Col>
+        <Col span={8}>
+          <div className="card-box" style={{marginBottom:0}}>
+            <Text strong>{I('SettingOutlined',{marginRight:6})}排名配置</Text>
+            <div style={{marginTop:8}}>
+              <Radio.Group value={configMode} onChange={e=>setConfigMode(e.target.value)} style={{marginBottom:8}}>
+                <Radio value="count">按人数</Radio>
+                <Radio value="percent">按比例</Radio>
+              </Radio.Group>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                {configMode==='count' ?
+                  <InputNumber min={1} max={100} value={configValue} onChange={setConfigValue} addonAfter="人" style={{width:140}} /> :
+                  <InputNumber min={1} max={50} value={configValue} onChange={setConfigValue} addonAfter="%" style={{width:140}} />
+                }
+                <Button type="primary" size="small" icon={I('SaveOutlined')} onClick={()=>message.success('配置已保存')}>保存</Button>
+              </div>
+            </div>
+          </div>
+        </Col>
+      </Row>
+
+      <Row gutter={16} style={{marginBottom:16}}>
+        {[
+          { bg:'linear-gradient(135deg,#ff4d4f 0%,#cf1322 100%)', label:'黑榜人数', value:MOCK_BLACK_RANKINGS.length, icon:'UserDeleteOutlined' },
+          { bg:'linear-gradient(135deg,#fa8c16 0%,#d46b08 100%)', label:'最低分', value:45, icon:'ArrowDownOutlined' },
+          { bg:'linear-gradient(135deg,#8c8c8c 0%,#595959 100%)', label:'平均分（黑榜内）', value:77.2, icon:'CalculatorOutlined' },
+        ].map((c,i)=>(
+          <Col span={8} key={i}>
+            <div className="gradient-card" style={{background:c.bg,display:'flex',alignItems:'center',gap:12}}>
+              {I(c.icon,{fontSize:28,opacity:.85})}
+              <div>
+                <div style={{fontSize:13,opacity:.85}}>{c.label}</div>
+                <div style={{fontSize:28,fontWeight:700,lineHeight:1.3}}>{c.value}</div>
+              </div>
+            </div>
+          </Col>
+        ))}
+      </Row>
+
+      <div className="card-box">
+        <Table dataSource={MOCK_BLACK_RANKINGS} rowKey="ranking" size="middle" pagination={{pageSize:20,showTotal:t=>`共 ${t} 人`}}
+          columns={[
+            { title:'倒数排名', dataIndex:'ranking', width:90, render:v=>(
+              <Badge count={`#${v}`} style={{background:v===1?'#ff4d4f':v===2?'#fa8c16':'#faad14',fontWeight:700}} />
+            )},
+            { title:'工号', dataIndex:'employeeNo', width:90 },
+            { title:'姓名', dataIndex:'name', width:70 },
+            { title:'归属', dataIndex:'companyBelong', width:60, render:v=><Tag color={COMPANY_COLORS[v]}>{v}</Tag> },
+            { title:'部门', dataIndex:'department', width:110, ellipsis:true },
+            { title:'岗位', dataIndex:'position', width:130, ellipsis:true },
+            { title:'职级', dataIndex:'rankLevel', width:60 },
+            { title:'结果分', dataIndex:'resultScore', width:70, render:v=><span style={{color:'#1890ff'}}>{v}</span> },
+            { title:'过程分', dataIndex:'processScore', width:70, render:v=><span style={{color:'#722ed1'}}>{v}</span> },
+            { title:'总分', dataIndex:'totalScore', width:80, defaultSortOrder:'ascend', sorter:(a,b)=>a.totalScore-b.totalScore, render:v=><span style={{fontWeight:700,fontSize:15,color:'#ff4d4f'}}>{v}</span> },
+            { title:'榜单', dataIndex:'list', width:80 },
+          ]}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ==================== QUARTER STAR ==================== */
+function QuarterStarPage() {
+  const [addOpen, setAddOpen] = useState(false);
+  const qOpts = [];
+  const now = new Date();
+  for(let y=now.getFullYear();y>=now.getFullYear()-1;y--) for(let q=4;q>=1;q--) qOpts.push(`${y}-Q${q}`);
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('StarOutlined',{marginRight:8})}季度之星</h2></div>
+      <div className="card-box">
+        <div style={{display:'flex',gap:12,marginBottom:16,alignItems:'center'}}>
+          <Form.Item label="季度" style={{marginBottom:0}}>
+            <Select defaultValue={qOpts[0]} style={{width:140}}>{qOpts.map(q=><Option key={q}>{q}</Option>)}</Select>
+          </Form.Item>
+          <Form.Item label="榜单" style={{marginBottom:0}}>
+            <Select placeholder="全部榜单" allowClear style={{width:180}}>{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id}>{rl.name}</Option>)}</Select>
+          </Form.Item>
+          <div style={{flex:1}} />
+          <Space>
+            <Button type="primary" icon={I('PlusOutlined')} onClick={()=>setAddOpen(true)}>选定人员</Button>
+            <Button type="primary" danger icon={I('SendOutlined')} onClick={()=>message.success('季度之星已发布')}>发布</Button>
+          </Space>
+        </div>
+        <Alert type="success" showIcon message={`${qOpts[0]} 季度之星已发布`} style={{marginBottom:16}} />
+        <div className="stars-grid">
+          {MOCK_STARS.map(star=>(
+            <div key={star.id} className="star-card">
+              <div className="star-rank">#{star.displayOrder}</div>
+              <Avatar size={64} style={{background:'linear-gradient(135deg,#667eea 0%,#764ba2 100%)',fontSize:24}}>{star.avatar}</Avatar>
+              <div className="star-name">{star.user}</div>
+              <div className="star-dept">{star.dept}</div>
+              <div style={{marginTop:8}}><Tag color="blue">{star.list}</Tag></div>
+              {star.comment && <div className="star-comment">"{star.comment}"</div>}
+              <Space style={{marginTop:12}}>
+                <Button size="small" icon={I('EditOutlined')}>编辑</Button>
+                <Popconfirm title="确认移除?"><Button size="small" danger icon={I('DeleteOutlined')}>移除</Button></Popconfirm>
+              </Space>
+            </div>
+          ))}
+        </div>
+      </div>
+      <Modal open={addOpen} title={<span>{I('StarOutlined',{marginRight:6})}选定季度之星</span>} width={600} onCancel={()=>setAddOpen(false)} onOk={()=>{message.success('已添加');setAddOpen(false)}}>
+        <Form layout="vertical" style={{marginTop:16}}>
+          <Row gutter={16}>
+            <Col span={12}><Form.Item label="季度"><Select defaultValue={qOpts[0]}>{qOpts.map(q=><Option key={q}>{q}</Option>)}</Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="所属榜单"><Select placeholder="选择榜单">{MOCK_RANKING_LISTS.map(rl=><Option key={rl.id}>{rl.name}</Option>)}</Select></Form.Item></Col>
+            <Col span={24}><Form.Item label="选择员工"><Select showSearch placeholder="搜索工号/姓名">{MOCK_USERS.map(u=><Option key={u.id}>{u.employeeNo} - {u.name} ({u.companyBelong})</Option>)}</Select></Form.Item></Col>
+            <Col span={12}><Form.Item label="展示顺序"><InputNumber min={1} defaultValue={1} style={{width:'100%'}} /></Form.Item></Col>
+            <Col span={24}><Form.Item label="点评"><TextArea rows={3} placeholder="对该员工的季度点评" /></Form.Item></Col>
+          </Row>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+
+function RoleManagePage() {
+  const roles = [
+    { key:'super_admin', name:'超级管理员', maxCount:'5', permissions:['全部权限','系统设置','用户管理','全部数据'] },
+    { key:'dept_admin', name:'部门管理员', maxCount:'不限', permissions:['审核积分','查看部门数据','录入积分'] },
+    { key:'employee', name:'普通员工', maxCount:'不限', permissions:['录入积分','审核指定积分','查看个人积分','查看公开排名'] },
+  ];
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('SafetyOutlined',{marginRight:8})}角色管理</h2></div>
+      <div className="card-box">
+        <div className="table-actions">
+          <Tooltip title="自定义角色功能将在后续版本中开放"><Button disabled icon={I('PlusOutlined')}>新增角色</Button></Tooltip>
+        </div>
+        <Table dataSource={roles} rowKey="key" size="middle" pagination={false} columns={[
+          { title:'角色名称', dataIndex:'name', width:150 },
+          { title:'标识', dataIndex:'key', width:120, render:v=><Tag>{v}</Tag> },
+          { title:'人数上限', dataIndex:'maxCount', width:100 },
+          { title:'权限', dataIndex:'permissions', render:perms=>perms.map(p=><Tag key={p} color="blue" style={{margin:2}}>{p}</Tag>) },
+        ]} />
+        <Alert type="info" showIcon style={{marginTop:16}} message="自定义角色功能将在后续版本中开放，当前支持预留新增角色入口" />
+      </div>
+    </div>
+  );
+}
+
+function ConfigManagePage() {
+  return (
+    <div className="page-container">
+      <div className="page-header"><h2>{I('SettingOutlined',{marginRight:8})}系统配置</h2></div>
+      <div className="card-box">
+        <Form layout="vertical">
+          <Divider orientation="left">{I('BarChartOutlined',{marginRight:4})} 排名设置</Divider>
+          <Row gutter={16}>
+            <Col span={8}><Form.Item label="排名每日更新时间"><Input defaultValue="02:00" /></Form.Item></Col>
+            <Col span={8}><Form.Item label="默认榜单排名人数"><InputNumber min={1} defaultValue={10} style={{width:'100%'}} /></Form.Item></Col>
+          </Row>
+          <Divider orientation="left">{I('FallOutlined',{marginRight:4})} 黑榜设置</Divider>
+          <Row gutter={16}>
+            <Col span={8}><Form.Item label="黑榜模式"><Select defaultValue="count"><Option value="count">按人数</Option><Option value="percent">按比例</Option></Select></Form.Item></Col>
+            <Col span={8}><Form.Item label="黑榜数值"><InputNumber min={1} defaultValue={10} style={{width:'100%'}} /></Form.Item></Col>
+          </Row>
+          <Divider orientation="left">{I('CalculatorOutlined',{marginRight:4})} 积分设置</Divider>
+          <Row gutter={16}>
+            <Col span={8}><Form.Item label="积分小数位数"><InputNumber min={0} max={3} defaultValue={1} style={{width:'100%'}} /></Form.Item></Col>
+            <Col span={8}><Form.Item label="小额免审阈值"><InputNumber min={0} defaultValue={0} style={{width:'100%'}} /></Form.Item></Col>
+            <Col span={8}><Form.Item label="过程分自动存档"><Switch defaultChecked /></Form.Item></Col>
+          </Row>
+          <Divider orientation="left">{I('WarningOutlined',{marginRight:4})} 异常告警设置</Divider>
+          <Row gutter={16}>
+            <Col span={8}><Form.Item label="单人单月扣分阈值"><InputNumber min={1} defaultValue={30} style={{width:'100%'}} addonAfter="分" /></Form.Item></Col>
+            <Col span={8}><Form.Item label="月度积分变化阈值"><InputNumber min={1} max={100} defaultValue={50} style={{width:'100%'}} addonAfter="%" /></Form.Item></Col>
+            <Col span={8}><Form.Item label="审核超时天数"><InputNumber min={1} defaultValue={3} style={{width:'100%'}} addonAfter="天" /></Form.Item></Col>
+          </Row>
+          <Divider orientation="left">{I('AlertOutlined',{marginRight:4})} 末位预警设置</Divider>
+          <Row gutter={16}>
+            <Col span={8}><Form.Item label="末位百分比阈值"><InputNumber min={1} max={50} defaultValue={10} style={{width:'100%'}} addonAfter="%" /></Form.Item></Col>
+            <Col span={8}><Form.Item label="连续低位触发高危月数"><InputNumber min={1} defaultValue={3} style={{width:'100%'}} addonAfter="月" /></Form.Item></Col>
+          </Row>
+          <Divider orientation="left">{I('FileTextOutlined',{marginRight:4})} 报表设置</Divider>
+          <Row gutter={16}>
+            <Col span={8}><Form.Item label="自动生成报表"><Switch /></Form.Item></Col>
+            <Col span={8}><Form.Item label="生成周期"><Select defaultValue="monthly"><Option value="monthly">每月1号</Option><Option value="quarterly">每季度首月</Option></Select></Form.Item></Col>
+          </Row>
+          <Divider orientation="left">{I('InfoCircleOutlined',{marginRight:4})} 系统信息</Divider>
+          <Row gutter={16}>
+            <Col span={8}><Form.Item label="系统名称"><Input defaultValue="积分管理系统-企业版" /></Form.Item></Col>
+            <Col span={8}><Form.Item label="系统Logo"><Input defaultValue="/logo.png" /></Form.Item></Col>
+          </Row>
+          <Form.Item><Button type="primary" icon={I('SaveOutlined')} onClick={()=>message.success('配置已保存')}>保存配置</Button></Form.Item>
+        </Form>
+      </div>
+    </div>
+  );
+}
+
+/* ==================== MAIN APP ==================== */
+function App() {
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [page, setPage] = useState('dashboard');
+  const [collapsed, setCollapsed] = useState(false);
+  const [openKeys, setOpenKeys] = useState(['personnel','indicator','point','ranking','system']);
+
+  if (!loggedIn) return <LoginPage onLogin={()=>setLoggedIn(true)} />;
+
+  const menuItems = [
+    { key:'dashboard', icon:I('HomeOutlined'), label:'工作台' },
+    { key:'cockpit', icon:I('DashboardOutlined'), label:'管理驾驶舱' },
+    { key:'personnel', icon:I('TeamOutlined'), label:'人员管理', children:[
+      { key:'user-current', icon:I('UserOutlined'), label:'员工管理' },
+      { key:'user-history', icon:I('HistoryOutlined'), label:'历史员工' },
+      { key:'department', icon:I('ApartmentOutlined'), label:'部门管理' },
+    ]},
+    { key:'ranking-list', icon:I('OrderedListOutlined'), label:'榜单配置' },
+    { key:'indicator', icon:I('AppstoreOutlined'), label:'指标库管理', children:[
+      { key:'indicator-category', icon:I('FolderOutlined'), label:'分类管理' },
+      { key:'indicator-list', icon:I('UnorderedListOutlined'), label:'指标列表' },
+    ]},
+    { key:'point', icon:I('EditOutlined'), label:'积分管理', children:[
+      { key:'point-entry', icon:I('ThunderboltOutlined'), label:'积分录入' },
+      { key:'point-process', icon:I('SyncOutlined'), label:'过程分维护' },
+      { key:'point-audit', icon:I('AuditOutlined'), label:'积分审核' },
+    ]},
+    { key:'ranking', icon:I('BarChartOutlined'), label:'排名展示', children:[
+      { key:'ranking-monthly', icon:I('RiseOutlined'), label:'排名查看' },
+      { key:'ranking-black', icon:I('FallOutlined'), label:'黑榜（倒数榜）' },
+      { key:'ranking-quarter-star', icon:I('StarOutlined'), label:'季度之星' },
+    ]},
+    { key:'system', icon:I('SettingOutlined'), label:'系统管理', children:[
+      { key:'system-role', icon:I('SafetyOutlined'), label:'角色管理' },
+      { key:'system-config', icon:I('ToolOutlined'), label:'系统配置' },
+    ]},
+  ];
+
+  const pageMap = {
+    'dashboard': <DashboardPage />,
+    'cockpit': <CockpitPage />,
+    'user-current': <CurrentUserListPage />,
+    'user-history': <HistoryUserListPage />,
+    'department': <DepartmentManagePage />,
+    'ranking-list': <RankingListManagePage />,
+    'indicator-category': <CategoryManagePage />,
+    'indicator-list': <IndicatorListPage />,
+    'point-entry': <QuickEntryPage />,
+    'point-process': <ProcessMaintainPage />,
+    'point-audit': <AuditListPage />,
+    'ranking-monthly': <MonthlyRankingPage />,
+    'ranking-black': <BlackRankingPage />,
+    'ranking-quarter-star': <QuarterStarPage />,
+    'system-role': <RoleManagePage />,
+    'system-config': <ConfigManagePage />,
+  };
+
+  return (
+    <Layout style={{minHeight:'100vh'}}>
+      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="dark" width={220}>
+        <div style={{height:64,display:'flex',alignItems:'center',padding:'0 20px',gap:10,borderBottom:'1px solid rgba(255,255,255,.1)'}}>
+          <div style={{width:32,height:32,background:'linear-gradient(135deg,#667eea,#764ba2)',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:16,flexShrink:0}}>积</div>
+          {!collapsed && <span style={{fontSize:16,fontWeight:700,color:'#fff',whiteSpace:'nowrap'}}>积分系统</span>}
+        </div>
+        <Menu theme="dark" mode="inline" selectedKeys={[page]} openKeys={openKeys} onOpenChange={setOpenKeys}
+          onClick={({key})=>setPage(key)}
+          items={menuItems.map(item=>({
+            key:item.key, icon:item.icon, label:item.label,
+            children: item.children?.map(c=>({ key:c.key, icon:c.icon, label:c.label }))
+          }))}
+        />
+      </Sider>
+      <Layout>
+        <Header style={{background:'#fff',padding:'0 24px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid #f0f0f0',height:64}}>
+          <span style={{fontSize:15,color:'#595959'}}>{I('SafetyCertificateOutlined',{marginRight:6,color:'#667eea'})}积分管理系统-企业版 <Tag color="purple">v2.1</Tag></span>
+          <Space>
+            <span style={{color:'#595959'}}>{I('UserOutlined',{marginRight:4})}张明 (000001)</span>
+            <Tag color="blue">super_admin</Tag>
+            <Button type="link" danger icon={I('LogoutOutlined')} onClick={()=>setLoggedIn(false)}>退出</Button>
+          </Space>
+        </Header>
+        <Content style={{background:'#f0f2f5',overflow:'auto'}}>
+          {pageMap[page] || <DashboardPage />}
+        </Content>
+      </Layout>
+    </Layout>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
