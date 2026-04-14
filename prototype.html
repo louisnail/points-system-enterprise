@@ -11,6 +11,7 @@
   <script src="https://unpkg.com/antd@5/dist/antd.min.js"></script>
   <script src="https://unpkg.com/@ant-design/icons@5/dist/index.umd.min.js"></script>
   <script src="https://unpkg.com/echarts@5/dist/echarts.min.js"></script>
+  <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/antd@5/dist/reset.css" />
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
@@ -154,6 +155,10 @@ const AUDIT_MAP = { 0:'待审核', 1:'已通过', 2:'已驳回' };
 const AUDIT_COLORS = { 0:'orange', 1:'green', 2:'red' };
 const RANK_COLORS = { 1:'#faad14', 2:'#bfbfbf', 3:'#d48806' };
 const CLASSIFICATIONS = ['项目经理积分','通用积分','交付开发积分','交付主管积分'];
+
+/* Shared department context for cross-page sync */
+const DeptContext = React.createContext({ depts: MOCK_DEPTS, setDepts: ()=>{} });
+const useDeptContext = () => React.useContext(DeptContext);
 
 /* ==================== SHARED: Field Management Drawer (增删改查) ==================== */
 function FieldManageDrawer({ open, onClose, fields, title, onSave }) {
@@ -674,6 +679,7 @@ function CockpitPage() {
 
 /* ==================== EMPLOYEE MANAGEMENT ==================== */
 function CurrentUserListPage() {
+  const { depts: sharedDepts } = useDeptContext();
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add');
   const [editingUser, setEditingUser] = useState(null);
@@ -696,12 +702,67 @@ function CurrentUserListPage() {
     { key:'gender', label:'性别', visible:false },
     { key:'hireDate', label:'入职日期', visible:false },
     { key:'email', label:'邮箱', visible:false },
+    { key:'baseCity', label:'base地', visible:false },
+    { key:'education', label:'学历', visible:false },
+    { key:'projectRole', label:'项目角色', visible:false },
   ]);
+  // Column render map: special rendering for specific fields
+  const colRenderMap = {
+    name: { width:70, render:(v,r)=><span style={{opacity:r.status===2?0.45:1}}>{v}</span> },
+    companyBelong: { width:60, render:v=>v?<Tag color={COMPANY_COLORS[v]}>{v}</Tag>:'-' },
+    department: { width:120, ellipsis:true },
+    position: { width:140, ellipsis:true },
+    rankLevel: { width:60 },
+    rankingList: { width:80 },
+    totalPoints: { width:70, render:(v,r)=>r.status===2?<span style={{color:'#bfbfbf',textDecoration:'line-through'}}>{v}</span>:(v||0) },
+    ranking: { width:70, render:(v,r)=>r.status===2?<Tooltip title="已禁用，不参与排名"><Tag color="default">--</Tag></Tooltip>:(v||'-') },
+    status: { width:100, render:v=>{
+      const m = {1:{c:'green',t:'在职',i:'CheckCircleOutlined'},2:{c:'red',t:'禁用(不排名)',i:'StopOutlined'},4:{c:'orange',t:'待岗',i:'ClockCircleOutlined'},5:{c:'gold',t:'停薪留职',i:'PauseCircleOutlined'}};
+      const s = m[v]||m[1]; return <Tag color={s.c} icon={I(s.i,{fontSize:11})}>{s.t}</Tag>;
+    }},
+    gender: { width:50, render:v=>v===1?'男':v===2?'女':'-' },
+    employeeNo: { width:90 },
+    hireDate: { width:100 },
+    email: { width:160, ellipsis:true },
+    baseCity: { width:80 },
+    education: { width:60 },
+    projectRole: { width:100 },
+  };
+  // Dynamically generate table columns from userFields
+  const dynamicColumns = useMemo(()=>{
+    const cols = userFields.filter(f=>f.visible).map(f=>{
+      const extra = colRenderMap[f.key] || { width:100 };
+      return { title:f.label, dataIndex:f.key, ...extra };
+    });
+    // Always append operation column
+    cols.push({ title:'操作', width:200, fixed:'right', render:(_,r)=>(
+      <Space size={4} wrap>
+        <a onClick={()=>openEdit(r)}>{I('EditOutlined')} 编辑</a>
+        {r.status===1 && <>
+          <Popconfirm title={<span>确认将 <strong>{r.name}</strong> 标记为离职？<br/>离职后将移入历史员工列表</span>} onConfirm={()=>leaveUser(r.id)}>
+            <a style={{color:'#ff4d4f'}}>{I('UserDeleteOutlined')} 离职</a>
+          </Popconfirm>
+          <Popconfirm title={<div><strong>禁用 {r.name}？</strong><br/><span style={{color:'#fa8c16'}}>禁用后该员工将不参与积分排名，<br/>但积分数据保留，启用后恢复排名。</span></div>}
+            onConfirm={()=>changeStatus(r.id, 2, '禁用')} okText="确认禁用" okButtonProps={{danger:true}}>
+            <a style={{color:'#fa8c16'}}>{I('StopOutlined')} 禁用</a>
+          </Popconfirm>
+        </>}
+        {r.status===2 && <Popconfirm title={<div><strong>启用 {r.name}？</strong><br/><span style={{color:'#52c41a'}}>启用后恢复参与积分排名。</span></div>}
+          onConfirm={()=>changeStatus(r.id, 1, '启用')} okText="确认启用">
+          <a style={{color:'#52c41a',fontWeight:600}}>{I('CheckCircleOutlined')} 启用</a>
+        </Popconfirm>}
+        {(r.status===4||r.status===5) && <Popconfirm title={`将 ${r.name} 恢复为在职？`} onConfirm={()=>changeStatus(r.id, 1, '启用(恢复在职)')}>
+          <a style={{color:'#52c41a'}}>{I('CheckCircleOutlined')} 启用</a>
+        </Popconfirm>}
+      </Space>
+    )});
+    return cols;
+  },[userFields]);
   // Modal form state
   const [form, setForm] = useState({employeeNo:'',name:'',companyBelong:undefined,department:undefined,status:1,gender:1,hireDate:null,email:'',position:'',rankLevel:undefined,rankingList:undefined,education:undefined,baseCity:'',projectRole:''});
   const resetForm = () => setForm({employeeNo:'',name:'',companyBelong:undefined,department:undefined,status:1,gender:1,hireDate:null,email:'',position:'',rankLevel:undefined,rankingList:undefined,education:undefined,baseCity:'',projectRole:''});
   const openAdd = () => { setModalMode('add'); resetForm(); setEditingUser(null); setModalOpen(true); };
-  const openEdit = (r) => { setModalMode('edit'); setEditingUser(r); setForm({employeeNo:r.employeeNo,name:r.name,companyBelong:r.companyBelong,department:r.department,status:r.status,gender:r.gender||1,hireDate:r.hireDate,email:r.email||'',position:r.position||'',rankLevel:r.rankLevel,rankingList:r.rankingList,education:undefined,baseCity:'',projectRole:''}); setModalOpen(true); };
+  const openEdit = (r) => { setModalMode('edit'); setEditingUser(r); setForm({employeeNo:r.employeeNo,name:r.name,companyBelong:r.companyBelong,department:r.department,status:r.status,gender:r.gender||1,hireDate:r.hireDate,email:r.email||'',position:r.position||'',rankLevel:r.rankLevel,rankingList:r.rankingList,education:r.education,baseCity:r.baseCity||'',projectRole:r.projectRole||''}); setModalOpen(true); };
   const handleSave = () => {
     if(!form.employeeNo.trim()||!form.name.trim()){ message.error('工号和姓名为必填项'); return; }
     if(modalMode==='add'){
@@ -735,6 +796,55 @@ function CurrentUserListPage() {
   },[users,keyword,statusFilter,companyFilter]);
   const activeCount = users.filter(u=>u.status===1).length;
   const disabledCount = users.filter(u=>u.status===2).length;
+  // Export Excel helper (SheetJS)
+  const exportExcel = (data, filename) => {
+    const visibleFields = userFields.filter(f=>f.visible);
+    const header = visibleFields.map(f=>f.label);
+    const rows = data.map(r=>visibleFields.map(f=>{
+      let v = r[f.key]; if(v===undefined||v===null) v='';
+      if(f.key==='status'){ v={1:'在职',2:'禁用',4:'待岗',5:'停薪留职'}[v]||v; }
+      if(f.key==='gender'){ v=v===1?'男':v===2?'女':''; }
+      return v;
+    }));
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+    ws['!cols'] = header.map((_,i) => ({ wch: Math.max(String(header[i]).length*2.5, ...rows.map(r=>String(r[i]||'').length*1.5), 8) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '员工列表');
+    XLSX.writeFile(wb, filename);
+    message.success(`已导出 ${data.length} 条记录`);
+  };
+  const downloadTemplate = () => {
+    const allFields = userFields.map(f=>f.label);
+    const exampleRow = userFields.map(f=>{
+      const examples = {employeeNo:'000010',name:'示例姓名',companyBelong:'TD',department:'技术研发部',position:'开发工程师',rankLevel:'P5',rankingList:'技术榜',totalPoints:'',ranking:'',status:'在职',gender:'男',hireDate:'2024-01-01',email:'example@td.com',baseCity:'杭州',education:'本科',projectRole:'开发'};
+      return examples[f.key]||'';
+    });
+    const ws = XLSX.utils.aoa_to_sheet([allFields, exampleRow]);
+    ws['!cols'] = allFields.map(h => ({ wch: Math.max(String(h).length*2.5, 12) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '导入模板');
+    XLSX.writeFile(wb, '员工导入模板.xlsx');
+    message.success('模板已下载');
+  };
+  // Parse uploaded Excel file
+  const handleImportFile = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, {type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(ws);
+        if(jsonData.length === 0){ message.warning('文件中没有数据'); return; }
+        message.success(`文件「${file.name}」解析成功，共 ${jsonData.length} 条员工记录（原型演示）`);
+        setImportOpen(false);
+      } catch(err) {
+        message.error('文件解析失败，请检查文件格式');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    return false;
+  };
+  const [importOpen, setImportOpen] = useState(false);
   return (
     <div className="page-container">
       <div className="page-header"><h2>{I('TeamOutlined',{marginRight:8})}员工管理</h2></div>
@@ -767,55 +877,16 @@ function CurrentUserListPage() {
         <div className="table-actions">
           <Space>
             <Button type="primary" icon={I('PlusOutlined')} onClick={openAdd}>新增员工</Button>
-            <Button icon={I('ExportOutlined')}>导出</Button>
-            <Button icon={I('DownloadOutlined')}>模板下载</Button>
-            <Button icon={I('UploadOutlined')}>批量导入</Button>
+            <Button icon={I('ExportOutlined')} onClick={()=>exportExcel(filteredUsers,'员工列表.xlsx')}>导出</Button>
+            <Button icon={I('DownloadOutlined')} onClick={downloadTemplate}>模板下载</Button>
+            <Button icon={I('UploadOutlined')} onClick={()=>setImportOpen(true)}>批量导入</Button>
             <Tooltip title="字段管理"><Button icon={I('SettingOutlined')} onClick={()=>setFieldOpen(true)} /></Tooltip>
           </Space>
           <span style={{color:'#8c8c8c'}}>共 {filteredUsers.length} 人</span>
         </div>
         <Table dataSource={filteredUsers} rowKey="id" size="middle" pagination={{pageSize:20,showTotal:t=>`共 ${t} 人`}}
           rowClassName={r=>r.status===2?'ant-table-row-disabled':''}
-          columns={[
-            { title:'工号', dataIndex:'employeeNo', width:90 },
-            { title:'姓名', dataIndex:'name', width:70, render:(v,r)=><span style={{opacity:r.status===2?0.45:1}}>{v}</span> },
-            { title:'归属', dataIndex:'companyBelong', width:60, render:v=><Tag color={COMPANY_COLORS[v]}>{v}</Tag> },
-            { title:'部门', dataIndex:'department', width:120, ellipsis:true },
-            { title:'岗位', dataIndex:'position', width:140, ellipsis:true },
-            { title:'职级', dataIndex:'rankLevel', width:60 },
-            { title:'榜单', dataIndex:'rankingList', width:80 },
-            { title:'积分', dataIndex:'totalPoints', width:70, render:(v,r)=>r.status===2?<span style={{color:'#bfbfbf',textDecoration:'line-through'}}>{v}</span>:v },
-            { title:'排名', dataIndex:'ranking', width:70, render:(v,r)=>r.status===2?<Tooltip title="已禁用，不参与排名"><Tag color="default">--</Tag></Tooltip>:v },
-            { title:'状态', dataIndex:'status', width:100, render:v=>{
-              const m = {1:{c:'green',t:'在职',i:'CheckCircleOutlined'},2:{c:'red',t:'禁用(不排名)',i:'StopOutlined'},4:{c:'orange',t:'待岗',i:'ClockCircleOutlined'},5:{c:'gold',t:'停薪留职',i:'PauseCircleOutlined'}};
-              const s = m[v]||m[1];
-              return <Tag color={s.c} icon={I(s.i,{fontSize:11})}>{s.t}</Tag>;
-            }},
-            { title:'操作', width:200, fixed:'right', render:(_,r)=>(
-              <Space size={4} wrap>
-                <a onClick={()=>openEdit(r)}>{I('EditOutlined')} 编辑</a>
-                {r.status===1 && <>
-                  <Popconfirm title={<span>确认将 <strong>{r.name}</strong> 标记为离职？<br/>离职后将移入历史员工列表</span>} onConfirm={()=>leaveUser(r.id)}>
-                    <a style={{color:'#ff4d4f'}}>{I('UserDeleteOutlined')} 离职</a>
-                  </Popconfirm>
-                  <Popconfirm title={<div><strong>禁用 {r.name}？</strong><br/><span style={{color:'#fa8c16'}}>禁用后该员工将不参与积分排名，<br/>但积分数据保留，启用后恢复排名。</span></div>}
-                    onConfirm={()=>changeStatus(r.id, 2, '禁用')} okText="确认禁用" okButtonProps={{danger:true}}>
-                    <a style={{color:'#fa8c16'}}>{I('StopOutlined')} 禁用</a>
-                  </Popconfirm>
-                </>}
-                {r.status===2 && <Popconfirm title={<div><strong>启用 {r.name}？</strong><br/><span style={{color:'#52c41a'}}>启用后恢复参与积分排名。</span></div>}
-                  onConfirm={()=>changeStatus(r.id, 1, '启用')} okText="确认启用">
-                  <a style={{color:'#52c41a',fontWeight:600}}>{I('CheckCircleOutlined')} 启用</a>
-                </Popconfirm>}
-                {r.status===4 && <Popconfirm title={`将 ${r.name} 从待岗恢复为在职？`} onConfirm={()=>changeStatus(r.id, 1, '启用(恢复在职)')}>
-                  <a style={{color:'#52c41a'}}>{I('CheckCircleOutlined')} 启用</a>
-                </Popconfirm>}
-                {r.status===5 && <Popconfirm title={`将 ${r.name} 从停薪留职恢复为在职？`} onConfirm={()=>changeStatus(r.id, 1, '启用(恢复在职)')}>
-                  <a style={{color:'#52c41a'}}>{I('CheckCircleOutlined')} 启用</a>
-                </Popconfirm>}
-              </Space>
-            )},
-          ]}
+          columns={dynamicColumns}
         />
       </div>
       <Modal open={modalOpen} title={<span>{I('UserAddOutlined',{marginRight:6})}{modalMode==='edit'?`编辑员工 — ${editingUser?.name||''}`:'新增员工'}</span>} width={720} onCancel={()=>setModalOpen(false)} onOk={handleSave} okText={modalMode==='edit'?'保存修改':'创建'}>
@@ -824,7 +895,7 @@ function CurrentUserListPage() {
             <Col span={12}><Form.Item label="工号" required><Input placeholder="如 000009" value={form.employeeNo} onChange={e=>setForm(f=>({...f,employeeNo:e.target.value}))} disabled={modalMode==='edit'} /></Form.Item></Col>
             <Col span={12}><Form.Item label="姓名" required><Input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} /></Form.Item></Col>
             <Col span={12}><Form.Item label="归属组织" required><Select placeholder="选择" value={form.companyBelong} onChange={v=>setForm(f=>({...f,companyBelong:v}))}><Option value="TD">TD</Option><Option value="XD">XD</Option><Option value="TY">TY</Option><Option value="WB">WB</Option></Select></Form.Item></Col>
-            <Col span={12}><Form.Item label="部门" required><TreeSelect treeData={MOCK_DEPTS} fieldNames={{label:'name',value:'name',children:'children'}} placeholder="选择部门" treeDefaultExpandAll value={form.department} onChange={v=>setForm(f=>({...f,department:v}))} /></Form.Item></Col>
+            <Col span={12}><Form.Item label="部门" required><TreeSelect treeData={sharedDepts} fieldNames={{label:'name',value:'name',children:'children'}} placeholder="选择部门" treeDefaultExpandAll value={form.department} onChange={v=>setForm(f=>({...f,department:v}))} /></Form.Item></Col>
             <Col span={12}><Form.Item label="员工状态"><Select value={form.status} onChange={v=>setForm(f=>({...f,status:v}))}>
               <Option value={1}>在职（参与排名）</Option><Option value={2}>禁用（不参与排名）</Option><Option value={4}>待岗</Option><Option value={5}>停薪留职</Option>
             </Select></Form.Item></Col>
@@ -839,6 +910,18 @@ function CurrentUserListPage() {
             <Col span={12}><Form.Item label="项目角色"><Input value={form.projectRole} onChange={e=>setForm(f=>({...f,projectRole:e.target.value}))} /></Form.Item></Col>
           </Row>
         </Form>
+      </Modal>
+      {/* Import Modal */}
+      <Modal open={importOpen} title={<span>{I('UploadOutlined',{marginRight:6})}批量导入员工</span>} onCancel={()=>setImportOpen(false)} footer={null} width={520}>
+        <Alert message="请先下载导入模板，按模板格式填写后上传 Excel 文件（.xlsx）" type="info" showIcon style={{marginBottom:16}} />
+        <Upload.Dragger accept=".xlsx,.xls,.csv" showUploadList={false} beforeUpload={handleImportFile}>
+          <p className="ant-upload-drag-icon">{I('InboxOutlined',{fontSize:48,color:'#1890ff'})}</p>
+          <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
+          <p className="ant-upload-hint">支持 Excel (.xlsx / .xls) 和 CSV 格式</p>
+        </Upload.Dragger>
+        <div style={{marginTop:12,textAlign:'center'}}>
+          <Button type="link" icon={I('DownloadOutlined')} onClick={downloadTemplate}>下载导入模板 (.xlsx)</Button>
+        </div>
       </Modal>
       <FieldManageDrawer open={fieldOpen} onClose={()=>setFieldOpen(false)} fields={userFields} title="员工列表 - 字段管理" onSave={setUserFields} />
     </div>
@@ -857,7 +940,17 @@ function HistoryUserListPage() {
       <div className="card-box">
         <div className="filter-bar">
           <Search placeholder="搜索工号/姓名" style={{width:220}} prefix={I('SearchOutlined')} allowClear onSearch={setKeyword} onChange={e=>!e.target.value&&setKeyword('')} />
-          <Button icon={I('ExportOutlined')} onClick={()=>message.success('导出成功')}>导出</Button>
+          <Button icon={I('ExportOutlined')} onClick={()=>{
+            const fields = [{k:'employeeNo',l:'工号'},{k:'name',l:'姓名'},{k:'companyBelong',l:'归属组织'},{k:'department',l:'部门'},{k:'position',l:'岗位'},{k:'rankLevel',l:'职级'},{k:'totalPoints',l:'最终积分'}];
+            const header = fields.map(f=>f.l);
+            const rows = filtered.map(r=>fields.map(f=>r[f.k]||''));
+            const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+            ws['!cols'] = header.map((_,i) => ({ wch: Math.max(String(header[i]).length*2.5, ...rows.map(r=>String(r[i]||'').length*1.5), 8) }));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '历史员工');
+            XLSX.writeFile(wb, '历史员工.xlsx');
+            message.success(`已导出 ${filtered.length} 条历史员工记录`);
+          }}>导出</Button>
         </div>
         <Table dataSource={filtered} rowKey="id" size="middle" columns={[
           { title:'工号', dataIndex:'employeeNo', width:100 },
@@ -891,8 +984,19 @@ function DepartmentManagePage() {
   const levelMap = {1:'集团',2:'事业部',3:'交付组'};
   const levelColors = {1:'#722ed1',2:'#1890ff',3:'#52c41a'};
 
-  // Local dept state for tree CRUD
-  const [depts, setDepts] = useState(JSON.parse(JSON.stringify(MOCK_DEPTS)));
+  // Use shared dept context for cross-page sync
+  const { depts: sharedDepts, setDepts: setSharedDepts } = useDeptContext();
+  const [depts, setDeptsLocal] = useState(sharedDepts);
+  // Sync local -> shared whenever depts change
+  const setDepts = (updater) => {
+    setDeptsLocal(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setSharedDepts(next);
+      return next;
+    });
+  };
+  // Sync shared -> local when navigating back
+  useEffect(() => { setDeptsLocal(sharedDepts); }, [sharedDepts]);
   const [deptManagers, setDeptManagers] = useState({ 2:'000001', 5:'000003', 6:'000007' });
 
   const flatMap = {};
@@ -900,11 +1004,32 @@ function DepartmentManagePage() {
   walk(depts);
   const selected = selectedKey ? flatMap[selectedKey] : null;
 
+  // Collect all dept names under a node (inclusive)
+  const collectDeptNames = (node) => {
+    let names = [node.name];
+    if(node.children) node.children.forEach(c => { names = names.concat(collectDeptNames(c)); });
+    return names;
+  };
+  // Compute real member count from MOCK_USERS
+  const computeMemberCount = (node) => {
+    const names = collectDeptNames(node);
+    return MOCK_USERS.filter(u => names.includes(u.department)).length;
+  };
+
+  // Tree data for left-side tree display (with value for TreeSelect compatibility)
   const toTreeData = (nodes) => nodes.map(n => ({
-    key: n.id, title: n.name, level: n.level, memberCount: n.memberCount || 0,
+    key: n.id, value: n.id, title: n.name, level: n.level,
+    memberCount: computeMemberCount(n),
     children: n.children?.length ? toTreeData(n.children) : undefined,
   }));
   const treeData = toTreeData(depts);
+
+  // Tree data for parent selection (excludes a node and its descendants to prevent circular ref)
+  const toParentSelectTree = (nodes, excludeId) => nodes.filter(n=>n.id!==excludeId).map(n => ({
+    key: n.id, value: n.id, title: n.name, level: n.level,
+    disabled: n.level >= 3,
+    children: n.children?.length ? toParentSelectTree(n.children, excludeId) : undefined,
+  }));
 
   // Find parent of a node
   const findParentId = (nodes, targetId, parentId) => {
@@ -933,19 +1058,27 @@ function DepartmentManagePage() {
   // Delete node from tree
   const deleteNode = (nodes, id) => nodes.filter(n=>n.id!==id).map(n=>({...n, children:n.children?deleteNode(n.children,id):n.children}));
 
-  // Get employees for selected department
-  const getDeptUsers = (deptName) => {
-    if (!deptName) return [];
-    return MOCK_USERS.filter(u => u.department === deptName || (deptName === '同盾集团'));
+  // Get employees for selected department (recursively includes sub-department employees)
+  const getDeptUsers = (dept) => {
+    if (!dept) return [];
+    const names = collectDeptNames(dept);
+    return MOCK_USERS.filter(u => names.includes(u.department));
   };
-  const deptUsers = selected ? getDeptUsers(selected.name) : [];
+  const deptUsers = selected ? getDeptUsers(selected) : [];
   const managerNo = selected ? deptManagers[selected.id] : null;
   const managerUser = managerNo ? MOCK_USERS.find(u => u.employeeNo === managerNo) : null;
+
+  // Auto-compute level based on parent selection
+  const getChildLevel = (parentId) => {
+    if(!parentId) return 1;
+    const parent = flatMap[parentId];
+    return parent ? Math.min(parent.level + 1, 3) : 2;
+  };
 
   // Modal handlers
   const openAddModal = () => {
     setModalMode('add');
-    setModalForm({ name:'', parentId:null, level:2, sortOrder:0, managerId:null });
+    setModalForm({ name:'', parentId:null, level:1, sortOrder:0, managerId:null });
     setModalOpen(true);
   };
   const openEditModal = () => {
@@ -970,7 +1103,7 @@ function DepartmentManagePage() {
     } else {
       const newId = Date.now();
       const parentId = modalMode==='addChild' ? selected.id : modalForm.parentId;
-      const newNode = { id:newId, name:modalForm.name, level:modalForm.level, memberCount:0, children:[] };
+      const newNode = { id:newId, name:modalForm.name, level:modalForm.level, children:[] };
       setDepts(prev=>insertNode(prev, parentId, newNode));
       if(modalForm.managerId) setDeptManagers(prev=>({...prev,[newId]:modalForm.managerId}));
       message.success(`新增部门「${modalForm.name}」成功`);
@@ -1055,7 +1188,7 @@ function DepartmentManagePage() {
               <Descriptions title={<span>{I('InfoCircleOutlined',{marginRight:6})}{selected.name} — 部门详情</span>} bordered column={3} size="small">
                 <Descriptions.Item label="部门名称">{selected.name}</Descriptions.Item>
                 <Descriptions.Item label="层级"><Tag color={levelColors[selected.level]}>{levelMap[selected.level]}</Tag></Descriptions.Item>
-                <Descriptions.Item label="人数"><Badge count={selected.memberCount||0} style={{background:'#1890ff'}} showZero /></Descriptions.Item>
+                <Descriptions.Item label="人数"><Badge count={computeMemberCount(selected)} style={{background:'#1890ff'}} showZero /></Descriptions.Item>
                 <Descriptions.Item label="排序">{selected.id}</Descriptions.Item>
                 <Descriptions.Item label="部门主管" span={2}>
                   {managerUser ? (
@@ -1070,7 +1203,7 @@ function DepartmentManagePage() {
               </Descriptions>
               <Space style={{marginTop:16}} wrap>
                 <Button type="primary" icon={I('EditOutlined')} onClick={openEditModal}>编辑部门</Button>
-                <Popconfirm title={<div>确认删除「{selected.name}」？<br/><span style={{color:'#ff4d4f'}}>该部门下有 {selected.memberCount||0} 名员工</span></div>}
+                <Popconfirm title={<div>确认删除「{selected.name}」？<br/><span style={{color:'#ff4d4f'}}>该部门下有 {computeMemberCount(selected)} 名员工</span></div>}
                   onConfirm={handleDeleteDept}>
                   <Button danger icon={I('DeleteOutlined')} disabled={(selected.children?.length||0)>0}>删除部门</Button>
                 </Popconfirm>
@@ -1155,14 +1288,22 @@ function DepartmentManagePage() {
             <Input value={modalForm.name} onChange={e=>setModalForm(f=>({...f,name:e.target.value}))} placeholder="请输入部门名称" />
           </Form.Item>
           <Form.Item label="上级部门">
-            <TreeSelect treeData={treeData} value={modalForm.parentId} onChange={v=>setModalForm(f=>({...f,parentId:v}))}
+            <TreeSelect treeData={modalMode==='edit' ? toParentSelectTree(depts, selected?.id) : treeData}
+              value={modalForm.parentId}
+              onChange={v=>{
+                const newLevel = getChildLevel(v);
+                setModalForm(f=>({...f, parentId:v, level:newLevel}));
+              }}
+              fieldNames={{label:'title',value:'value',children:'children'}}
               placeholder="留空为顶级部门" allowClear treeDefaultExpandAll
-              disabled={modalMode==='addChild'} />
+              disabled={modalMode==='addChild'}
+              treeLine={{showLeafIcon:false}}
+            />
           </Form.Item>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item label="层级">
-                <Select value={modalForm.level} onChange={v=>setModalForm(f=>({...f,level:v}))}>
+                <Select value={modalForm.level} onChange={v=>setModalForm(f=>({...f,level:v}))} disabled={!!modalForm.parentId}>
                   <Option value={1}>集团</Option><Option value={2}>事业部</Option><Option value={3}>交付组</Option>
                 </Select>
               </Form.Item>
@@ -2058,6 +2199,7 @@ function App() {
   const [page, setPage] = useState('dashboard');
   const [collapsed, setCollapsed] = useState(false);
   const [openKeys, setOpenKeys] = useState(['personnel','indicator','point','ranking','system']);
+  const [sharedDepts, setSharedDepts] = useState(JSON.parse(JSON.stringify(MOCK_DEPTS)));
 
   if (!loggedIn) return <LoginPage onLogin={()=>setLoggedIn(true)} />;
 
@@ -2134,7 +2276,9 @@ function App() {
           </Space>
         </Header>
         <Content style={{background:'#f0f2f5',overflow:'auto'}}>
-          {pageMap[page] || <DashboardPage />}
+          <DeptContext.Provider value={{depts:sharedDepts, setDepts:setSharedDepts}}>
+            {pageMap[page] || <DashboardPage />}
+          </DeptContext.Provider>
         </Content>
       </Layout>
     </Layout>

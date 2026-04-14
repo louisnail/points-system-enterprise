@@ -1,0 +1,124 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 14px;
+  color: #333;
+}
+
+#app {
+  height: 100vh;
+}
+
+.page-container {
+  padding: 24px;
+}
+
+.page-header {
+  margin-bottom: 24px;
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #262626;
+    margin: 0;
+  }
+}
+
+.card-box {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.table-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stat-card {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 20px;
+  text-align: center;
+  .stat-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: #1890ff;
+  }
+  .stat-label {
+    font-size: 14px;
+    color: #8c8c8c;
+    margin-top: 4px;
+  }
+}
+
+// 列拖拽排序
+.column-drag-over {
+  border-left: 2px solid #1890ff;
+}
+
+th[draggable="true"] {
+  cursor: grab;
+  user-select: none;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+// 表格列宽拖拽手柄样式
+.ant-table-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+  z-index: 1;
+}
+
+// 表格单元格间距优化
+.ant-table {
+  .ant-table-thead > tr > th {
+    white-space: nowrap;
+    padding: 10px 12px;
+  }
+  .ant-table-tbody > tr > td {
+    padding: 8px 12px;
+  }
+  // 省略号列 hover 显示 tooltip
+  .ant-table-cell-ellipsis {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: keep-all;
+  }
+}
